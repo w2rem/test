@@ -441,7 +441,7 @@ def render_memory_bar() -> None:
             )
             .properties(height=90)
         )
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart, width="stretch", key="uf5_mem_bar")
     except ImportError:
         st.caption("chart backend missing (altair/pandas)")
     c1, c2, c3, c4 = st.columns(4)
@@ -485,7 +485,7 @@ def render_cpu_panel() -> None:
             import pandas as pd
 
             frame = pd.DataFrame({"load %": per_core})
-            st.bar_chart(frame, color=COLOR_ACCENT)
+            st.bar_chart(frame, color=COLOR_ACCENT, width="stretch", key="uf5_cpu_bar")
         except ImportError:
             st.caption("st.bar_chart needs pandas")
 
@@ -501,10 +501,10 @@ def render_canvas() -> None:
     st.session_state.setdefault("uf5_canvas", 0)
     names = ["Memory", "CPU"]
     left, mid, right = st.columns([1, 6, 1])
-    if left.button("◀", key="uf5_prev", use_container_width=True):
+    if left.button("◀", key="uf5_prev", width="stretch"):
         st.session_state["uf5_canvas"] = (st.session_state["uf5_canvas"] - 1) % len(names)
         st.rerun()
-    if right.button("▶", key="uf5_next", use_container_width=True):
+    if right.button("▶", key="uf5_next", width="stretch"):
         st.session_state["uf5_canvas"] = (st.session_state["uf5_canvas"] + 1) % len(names)
         st.rerun()
     choice = mid.segmented_control("Canvas", names,
@@ -605,7 +605,7 @@ def render_shell() -> None:
     with st.form("uf5_shell_form", clear_on_submit=True):
         cmd = st.text_input("Command", placeholder="ls -la /tmp",
                             label_visibility="collapsed")
-        run = st.form_submit_button("Run ⏎", use_container_width=True)
+        run = st.form_submit_button("Run ⏎", width="stretch")
     if run and cmd and cmd.strip():
         cmd = cmd.strip()
         if cmd.startswith("cd"):
@@ -656,7 +656,7 @@ def render_logs() -> None:
     c1, c2 = st.columns([3, 1])
     level_filter = c1.segmented_control("Level", ["all", "debug", "info", "ok", "warn", "error"],
                                         default="all", key="uf5_log_level")
-    if c2.button("Clear", use_container_width=True):
+    if c2.button("Clear", width="stretch"):
         st.session_state["uf5_events"] = []
         st.rerun()
     lines = []
