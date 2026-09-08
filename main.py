@@ -384,10 +384,19 @@ def inject_style() -> None:
         .uf5-ver {{ display: flex; align-items: center; gap: 12px; }}
         .uf5-ver b {{ font-size: 15px; }}
         section[data-testid="stSidebar"] {{ background: {COLOR_PANEL}; }}
-        /* Smooth bar motion between refreshes (Chromium transitions SVG geometry). */
-        div[data-testid="stAltairChart"] rect, div[data-testid="stVegaLiteChart"] rect {{
-            transition: x .6s ease, y .6s ease, width .6s ease, height .6s ease;
-        }}
+        /* Water-fill CPU bars: fresh nodes animate 0 -> value every tick. */
+        .uf5-row {{ display: flex; align-items: flex-end; gap: 10px; }}
+        .uf5-col {{ flex: 1; display: flex; flex-direction: column; align-items: center; }}
+        .uf5-track {{ width: 100%; max-width: 56px; height: 200px;
+                      background: {COLOR_ACCENT_PALE}; border-radius: 8px;
+                      position: relative; overflow: hidden; }}
+        .uf5-fill {{ position: absolute; bottom: 0; left: 0; right: 0;
+                     background: linear-gradient(to top, {COLOR_ACCENT}, {COLOR_ACCENT_SOFT});
+                     border-radius: 8px; transform-box: fill-box; transform-origin: bottom;
+                     animation: uf5fill .9s cubic-bezier(.22,.8,.3,1) backwards; }}
+        .uf5-cap {{ margin-top: 6px; font-size: 11px; color: {COLOR_MUTED}; }}
+        .uf5-val {{ font-size: 11px; font-weight: 700; color: {COLOR_TEXT}; margin-bottom: 2px; }}
+        @keyframes uf5fill {{ from {{ transform: scaleY(0); }} to {{ transform: scaleY(1); }} }}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -485,57 +494,20 @@ def render_cpu_panel() -> None:
     m3.metric("Free (avg)", f"{100 - avg:.1f}%")
 
     if per_core:
-        # Water-fill bars: raw values, each tick animates 0 -> value in the
-        # browser (one tick, no multi-tick glide). Pure HTML+JS, no chart lib.
+        # Water-fill bars: raw values; each tick renders fresh nodes that
+        # animate 0 -> value via CSS (no iframe, no reload flash).
         bars = []
         for i, (name, value) in enumerate(per_core.items()):
             label = re.sub(r"[^a-z0-9]", "", name.lower()) or f"c{i}"
+            pct = max(min(value, 100), 0)
             bars.append(
-                f'<div class="uf5-col"><div class="uf5-track">'
-                f'<div class="uf5-fill" data-h="{max(min(value, 100), 0):.1f}" '
-                f'style="animation-delay:{i * 70}ms"></div></div>'
+                f'<div class="uf5-col"><div class="uf5-val">{value:.0f}</div>'
+                f'<div class="uf5-track"><div class="uf5-fill" '
+                f'style="height:{pct:.1f}%;animation-delay:{i * 70}ms"></div></div>'
                 f'<div class="uf5-cap">{label}</div></div>'
             )
-        html_doc = f"""<html><head><style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ background: transparent; font-family: sans-serif; }}
-        .uf5-row {{ display: flex; align-items: flex-end; gap: 10px; height: 230px; }}
-        .uf5-col {{ flex: 1; display: flex; flex-direction: column; align-items: center;
-                    height: 100%; justify-content: flex-end; }}
-        .uf5-track {{ width: 100%; max-width: 56px; height: 200px; background: {COLOR_ACCENT_PALE};
-                      border-radius: 8px; position: relative; overflow: hidden; }}
-        .uf5-fill {{ position: absolute; bottom: 0; left: 0; right: 0; height: 0;
-                     background: linear-gradient(to top, {COLOR_ACCENT}, {COLOR_ACCENT_SOFT});
-                     border-radius: 8px; }}
-        .uf5-cap {{ margin-top: 6px; font-size: 11px; color: {COLOR_MUTED}; }}
-        .uf5-val {{ font-size: 11px; font-weight: 700; color: {COLOR_TEXT}; margin-bottom: 2px; }}
-        </style></head><body><div class="uf5-row">{''.join(bars)}</div>
-        <script>
-        (function () {{
-          var fills = document.querySelectorAll('.uf5-fill');
-          var t0 = null, dur = 900;
-          function ease(t) {{ return 1 - Math.pow(1 - t, 3); }}
-          function step(ts) {{
-            if (!t0) t0 = ts;
-            var done = true;
-            fills.forEach(function (el) {{
-              var delay = parseFloat(el.style.animationDelay || '0');
-              var lp = Math.max(0, Math.min(((ts - t0) - delay) / dur, 1));
-              var target = parseFloat(el.dataset.h) / 100 * 200;
-              el.style.height = (target * ease(lp)) + 'px';
-              if (lp < 1) done = false;
-            }});
-            if (!done) requestAnimationFrame(step);
-          }}
-          requestAnimationFrame(step);
-        }})();
-        </script></body></html>"""
-        try:
-            from streamlit.components.v1 import html as st_html
-
-            st_html(html_doc, height=260)
-        except ImportError:
-            st.caption("html components unavailable")
+        st.markdown(f'<div class="uf5-row">{"".join(bars)}</div>',
+                    unsafe_allow_html=True)
 
 
 def render_canvas() -> None:
