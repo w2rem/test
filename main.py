@@ -398,10 +398,8 @@ def inject_style() -> None:
         .uf5-cap {{ margin-top: 6px; font-size: 11px; color: {COLOR_MUTED}; }}
         .uf5-val {{ font-size: 11px; font-weight: 700; color: {COLOR_TEXT}; margin-bottom: 2px; }}
         @keyframes uf5fill {{ from {{ transform: scaleY(0); }} to {{ transform: scaleY(1); }} }}
-        /* Canvas switcher: centered pill group. */
-        div[data-testid="stSegmentedControl"] {{ display: flex; justify-content: center; }}
-        div[data-testid="stSegmentedControl"] button {{ border-radius: 999px !important;
-            padding: 8px 28px !important; font-weight: 600 !important; }}
+        /* Canvas tabs: larger labels, breathing room. */
+        button[data-testid="stTab"] {{ font-size: 15px; font-weight: 600; }}
         /* Memory stacked bar: one 0..max track, animated segment widths. */
         .uf5-memtrack {{ display: flex; height: 44px; background: {COLOR_ACCENT_PALE};
                          border-radius: 999px; overflow: hidden; }}
@@ -515,36 +513,34 @@ def render_cpu_panel() -> None:
 
 
 def render_canvas() -> None:
-    """Memory / CPU canvases switched by a centered pill switcher.
+    """Memory / CPU canvases as native tabs (no switcher widget, no emoji).
 
-    Note: a mouse wheel cannot be captured by pure Streamlit — the pill
-    switcher is the mechanism; it drives one session index.
+    Each tab owns a realtime fragment; the visible one animates, the hidden
+    one costs a single /proc read per tick. Wheel switching is impossible in
+    pure Streamlit — tabs are the lightest native mechanism.
     """
     import streamlit as st
 
-    st.session_state.setdefault("uf5_canvas", 0)
-    names = ["💾 Memory", "🧠 CPU"]
-    choice = st.segmented_control("Canvas", names,
-                                  default=names[st.session_state["uf5_canvas"]],
-                                  label_visibility="collapsed",
-                                  key="uf5_seg")
-    if choice in names:
-        st.session_state["uf5_canvas"] = names.index(choice)
-    # Realtime refresh: each canvas is a fragment re-running on its own timer,
-    # so charts/metrics update without a full-page rerun.
     try:
         live = st.fragment(run_every=2)
     except TypeError:
         live = st.fragment
 
-    @live
-    def _live_canvas() -> None:
-        if st.session_state.get("uf5_canvas", 0) == 0:
+    tab_mem, tab_cpu = st.tabs(["Memory", "CPU"])
+
+    with tab_mem:
+        @live
+        def _live_memory() -> None:
             render_memory_bar()
-        else:
+
+        _live_memory()
+
+    with tab_cpu:
+        @live
+        def _live_cpu() -> None:
             render_cpu_panel()
 
-    _live_canvas()
+        _live_cpu()
 
 
 def render_geo_cluster() -> None:
