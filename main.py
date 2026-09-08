@@ -488,7 +488,6 @@ def render_cpu_panel() -> None:
             st.bar_chart(frame, color=COLOR_ACCENT)
         except ImportError:
             st.caption("st.bar_chart needs pandas")
-    log_event("debug", f"cpu sample avg={avg}% cores={len(per_core)}")
 
 
 def render_canvas() -> None:
@@ -514,10 +513,21 @@ def render_canvas() -> None:
     if choice in names:
         st.session_state["uf5_canvas"] = names.index(choice)
     st.subheader(f"Live — {names[st.session_state['uf5_canvas']]}")
-    if st.session_state["uf5_canvas"] == 0:
-        render_memory_bar()
-    else:
-        render_cpu_panel()
+    # Realtime refresh: each canvas is a fragment re-running on its own timer,
+    # so charts/metrics update without a full-page rerun.
+    try:
+        live = st.fragment(run_every=2)
+    except TypeError:
+        live = st.fragment
+
+    @live
+    def _live_canvas() -> None:
+        if st.session_state.get("uf5_canvas", 0) == 0:
+            render_memory_bar()
+        else:
+            render_cpu_panel()
+
+    _live_canvas()
 
 
 def render_geo_cluster() -> None:
