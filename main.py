@@ -46,8 +46,6 @@ CLUSTER_TTL_SEC = 600
 GO_LOG_PATH = os.environ.get("UF5VMJT_GO_LOG", "/tmp/uf5vmjt-go.log").strip()
 SHELL_TIMEOUT_SEC = 15
 SHELL_HISTORY_LIMIT = 20
-# EMA factor for CPU smoothing: lower = smoother/slower, higher = snappier.
-CPU_SMOOTH_ALPHA = 0.35
 
 
 # ---------------------------------------------------------------------------
@@ -479,19 +477,7 @@ def render_cpu_panel() -> None:
         dt, di = t2 - t1, i2 - i1
         per_core[name] = round((1 - di / dt) * 100, 1) if dt > 0 else 0.0
     dt, di = total2 - total1, idle2 - idle1
-    raw_avg = round((1 - di / dt) * 100, 1) if dt > 0 else 0.0
-
-    # EMA smoothing: glide towards new samples instead of jumping.
-    prev = st.session_state.setdefault("uf5_cpu_smooth", {})
-    smooth: dict[str, float] = {}
-    for name, value in per_core.items():
-        old = prev.get(name, value)
-        smooth[name] = round(CPU_SMOOTH_ALPHA * value + (1 - CPU_SMOOTH_ALPHA) * old, 1)
-    smooth["avg"] = round(
-        CPU_SMOOTH_ALPHA * raw_avg + (1 - CPU_SMOOTH_ALPHA) * prev.get("avg", raw_avg), 1)
-    st.session_state["uf5_cpu_smooth"] = smooth
-    per_core = {k: v for k, v in smooth.items() if k != "avg"}
-    avg = smooth["avg"]
+    avg = round((1 - di / dt) * 100, 1) if dt > 0 else 0.0
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Average load", f"{avg}%")
@@ -499,25 +485,57 @@ def render_cpu_panel() -> None:
     m3.metric("Free (avg)", f"{100 - avg:.1f}%")
 
     if per_core:
-        try:
-            import altair as alt
-            import pandas as pd
-
-            frame = pd.DataFrame([{"core": k, "load": v} for k, v in per_core.items()])
-            chart = (
-                alt.Chart(frame)
-                .mark_bar(color=COLOR_ACCENT)
-                .encode(
-                    x=alt.X("core:N", title=None, sort=list(per_core.keys())),
-                    y=alt.Y("load:Q", title="load %",
-                            scale=alt.Scale(domain=[0, 100])),
-                    tooltip=["core", "load"],
-                )
-                .properties(height=220)
+        # Water-fill bars: raw values, each tick animates 0 -> value in the
+        # browser (one tick, no multi-tick glide). Pure HTML+JS, no chart lib.
+        bars = []
+        for i, (name, value) in enumerate(per_core.items()):
+            label = re.sub(r"[^a-z0-9]", "", name.lower()) or f"c{i}"
+            bars.append(
+                f'<div class="uf5-col"><div class="uf5-track">'
+                f'<div class="uf5-fill" data-h="{max(min(value, 100), 0):.1f}" '
+                f'style="animation-delay:{i * 70}ms"></div></div>'
+                f'<div class="uf5-cap">{label}</div></div>'
             )
-            st.altair_chart(chart, width="stretch", key="uf5_cpu_bar")
+        html_doc = f"""<html><head><style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ background: transparent; font-family: sans-serif; }}
+        .uf5-row {{ display: flex; align-items: flex-end; gap: 10px; height: 230px; }}
+        .uf5-col {{ flex: 1; display: flex; flex-direction: column; align-items: center;
+                    height: 100%; justify-content: flex-end; }}
+        .uf5-track {{ width: 100%; max-width: 56px; height: 200px; background: {COLOR_ACCENT_PALE};
+                      border-radius: 8px; position: relative; overflow: hidden; }}
+        .uf5-fill {{ position: absolute; bottom: 0; left: 0; right: 0; height: 0;
+                     background: linear-gradient(to top, {COLOR_ACCENT}, {COLOR_ACCENT_SOFT});
+                     border-radius: 8px; }}
+        .uf5-cap {{ margin-top: 6px; font-size: 11px; color: {COLOR_MUTED}; }}
+        .uf5-val {{ font-size: 11px; font-weight: 700; color: {COLOR_TEXT}; margin-bottom: 2px; }}
+        </style></head><body><div class="uf5-row">{''.join(bars)}</div>
+        <script>
+        (function () {{
+          var fills = document.querySelectorAll('.uf5-fill');
+          var t0 = null, dur = 900;
+          function ease(t) {{ return 1 - Math.pow(1 - t, 3); }}
+          function step(ts) {{
+            if (!t0) t0 = ts;
+            var done = true;
+            fills.forEach(function (el) {{
+              var delay = parseFloat(el.style.animationDelay || '0');
+              var lp = Math.max(0, Math.min(((ts - t0) - delay) / dur, 1));
+              var target = parseFloat(el.dataset.h) / 100 * 200;
+              el.style.height = (target * ease(lp)) + 'px';
+              if (lp < 1) done = false;
+            }});
+            if (!done) requestAnimationFrame(step);
+          }}
+          requestAnimationFrame(step);
+        }})();
+        </script></body></html>"""
+        try:
+            from streamlit.components.v1 import html as st_html
+
+            st_html(html_doc, height=260)
         except ImportError:
-            st.caption("charts need altair/pandas")
+            st.caption("html components unavailable")
 
 
 def render_canvas() -> None:
