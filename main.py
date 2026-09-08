@@ -393,7 +393,8 @@ def inject_style() -> None:
         .uf5-fill {{ position: absolute; bottom: 0; left: 0; right: 0;
                      background: linear-gradient(to top, {COLOR_ACCENT}, {COLOR_ACCENT_SOFT});
                      border-radius: 8px; transform-box: fill-box; transform-origin: bottom;
-                     animation: uf5fill .9s cubic-bezier(.22,.8,.3,1) backwards; }}
+                     animation: uf5fill .9s cubic-bezier(.22,.8,.3,1) backwards;
+                     transition: height .9s cubic-bezier(.22,.8,.3,1); }}
         .uf5-cap {{ margin-top: 6px; font-size: 11px; color: {COLOR_MUTED}; }}
         .uf5-val {{ font-size: 11px; font-weight: 700; color: {COLOR_TEXT}; margin-bottom: 2px; }}
         @keyframes uf5fill {{ from {{ transform: scaleY(0); }} to {{ transform: scaleY(1); }} }}
