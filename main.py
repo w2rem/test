@@ -482,12 +482,24 @@ def render_cpu_panel() -> None:
 
     if per_core:
         try:
+            import altair as alt
             import pandas as pd
 
-            frame = pd.DataFrame({"load %": per_core})
-            st.bar_chart(frame, color=COLOR_ACCENT, width="stretch", key="uf5_cpu_bar")
+            frame = pd.DataFrame([{"core": k, "load": v} for k, v in per_core.items()])
+            chart = (
+                alt.Chart(frame)
+                .mark_bar(color=COLOR_ACCENT)
+                .encode(
+                    x=alt.X("core:N", title=None, sort=list(per_core.keys())),
+                    y=alt.Y("load:Q", title="load %",
+                            scale=alt.Scale(domain=[0, 100])),
+                    tooltip=["core", "load"],
+                )
+                .properties(height=220)
+            )
+            st.altair_chart(chart, width="stretch", key="uf5_cpu_bar")
         except ImportError:
-            st.caption("st.bar_chart needs pandas")
+            st.caption("charts need altair/pandas")
 
 
 def render_canvas() -> None:
