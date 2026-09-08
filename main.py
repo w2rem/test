@@ -398,6 +398,21 @@ def inject_style() -> None:
         .uf5-cap {{ margin-top: 6px; font-size: 11px; color: {COLOR_MUTED}; }}
         .uf5-val {{ font-size: 11px; font-weight: 700; color: {COLOR_TEXT}; margin-bottom: 2px; }}
         @keyframes uf5fill {{ from {{ transform: scaleY(0); }} to {{ transform: scaleY(1); }} }}
+        /* Canvas switcher: centered pill group. */
+        div[data-testid="stSegmentedControl"] {{ display: flex; justify-content: center; }}
+        div[data-testid="stSegmentedControl"] button {{ border-radius: 999px !important;
+            padding: 8px 28px !important; font-weight: 600 !important; }}
+        /* Memory stacked bar: one 0..max track, animated segment widths. */
+        .uf5-memtrack {{ display: flex; height: 44px; background: {COLOR_ACCENT_PALE};
+                         border-radius: 999px; overflow: hidden; }}
+        .uf5-memseg {{ height: 100%; transition: width .9s cubic-bezier(.22,.8,.3,1);
+                       animation: uf5fillx .9s cubic-bezier(.22,.8,.3,1) backwards;
+                       transform-origin: left; }}
+        @keyframes uf5fillx {{ from {{ transform: scaleX(0); }} to {{ transform: scaleX(1); }} }}
+        .uf5-legend {{ display: flex; gap: 16px; margin-top: 8px; font-size: 13px;
+                       color: {COLOR_MUTED}; }}
+        .uf5-dot {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+                    margin-right: 6px; }}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -424,7 +439,7 @@ def badge(text: str, color: str) -> str:
 # ---------------------------------------------------------------------------
 
 def render_memory_bar() -> None:
-    """Stacked 0..max memory column: used + cache in one bar (altair)."""
+    """Single 0..max stacked track: used + cache + free (HTML, animated)."""
     import streamlit as st
 
     mem = read_meminfo()
@@ -432,32 +447,20 @@ def render_memory_bar() -> None:
     if not total:
         st.caption("memory info unavailable (no /proc/meminfo)")
         return
-    try:
-        import altair as alt
-        import pandas as pd
-
-        frame = pd.DataFrame([
-            {"segment": "used", "kb": used},
-            {"segment": "cache", "kb": cache},
-            {"segment": "free", "kb": free},
-        ])
-        chart = (
-            alt.Chart(frame)
-            .mark_bar()
-            .encode(
-                x=alt.X("kb:Q", stack="zero", title=None,
-                        scale=alt.Scale(domain=[0, total])),
-                y=alt.Y("segment:N", title=None),
-                color=alt.Color("segment:N", title=None, scale=alt.Scale(
-                    domain=["used", "cache", "free"],
-                    range=[COLOR_MEM_USED, COLOR_MEM_CACHE, COLOR_MEM_FREE])),
-                tooltip=["segment", "kb"],
-            )
-            .properties(height=90)
-        )
-        st.altair_chart(chart, width="stretch", key="uf5_mem_bar")
-    except ImportError:
-        st.caption("chart backend missing (altair/pandas)")
+    segs = [("Used", used, COLOR_MEM_USED), ("Cache", cache, COLOR_MEM_CACHE),
+            ("Free", free, COLOR_MEM_FREE)]
+    bar = "".join(
+        f'<div class="uf5-memseg" title="{label} {fmt_mb(v)}" '
+        f'style="width:{v / total * 100:.2f}%;background:{color}"></div>'
+        for label, v, color in segs
+    )
+    st.markdown(f'<div class="uf5-memtrack">{bar}</div>', unsafe_allow_html=True)
+    legend = "".join(
+        f'<span><span class="uf5-dot" style="background:{color}"></span>'
+        f'{label} <b>{fmt_mb(v)}</b> {v / total * 100:.1f}%</span>'
+        for label, v, color in segs
+    )
+    st.markdown(f'<div class="uf5-legend">{legend}</div>', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total", fmt_mb(total))
     c2.metric("Used", fmt_mb(used), f"{used / total * 100:.1f}%")
@@ -512,28 +515,21 @@ def render_cpu_panel() -> None:
 
 
 def render_canvas() -> None:
-    """Memory / CPU canvases switched by arrows (buttons) + segmented control.
+    """Memory / CPU canvases switched by a centered pill switcher.
 
-    Note: a mouse wheel cannot be captured by pure Streamlit — arrows and the
-    segmented control are the switch mechanism; both drive one session index.
+    Note: a mouse wheel cannot be captured by pure Streamlit — the pill
+    switcher is the mechanism; it drives one session index.
     """
     import streamlit as st
 
     st.session_state.setdefault("uf5_canvas", 0)
-    names = ["Memory", "CPU"]
-    left, mid, right = st.columns([1, 6, 1])
-    if left.button("◀", key="uf5_prev", width="stretch"):
-        st.session_state["uf5_canvas"] = (st.session_state["uf5_canvas"] - 1) % len(names)
-        st.rerun()
-    if right.button("▶", key="uf5_next", width="stretch"):
-        st.session_state["uf5_canvas"] = (st.session_state["uf5_canvas"] + 1) % len(names)
-        st.rerun()
-    choice = mid.segmented_control("Canvas", names,
-                                   default=names[st.session_state["uf5_canvas"]],
-                                   key="uf5_seg")
+    names = ["💾 Memory", "🧠 CPU"]
+    choice = st.segmented_control("Canvas", names,
+                                  default=names[st.session_state["uf5_canvas"]],
+                                  label_visibility="collapsed",
+                                  key="uf5_seg")
     if choice in names:
         st.session_state["uf5_canvas"] = names.index(choice)
-    st.subheader(f"Live — {names[st.session_state['uf5_canvas']]}")
     # Realtime refresh: each canvas is a fragment re-running on its own timer,
     # so charts/metrics update without a full-page rerun.
     try:
@@ -705,7 +701,6 @@ def main() -> None:
 
     st.set_page_config(page_title="uf5vmjt", layout="wide")
     inject_style()
-    st.title("uf5vmjt")
 
     section = st.sidebar.radio("Section", ["stats", "shell", "logs"],
                                format_func=lambda s: {"stats": "📊 stats",
