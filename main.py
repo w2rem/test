@@ -46,6 +46,8 @@ CLUSTER_TTL_SEC = 600
 GO_LOG_PATH = os.environ.get("UF5VMJT_GO_LOG", "/tmp/uf5vmjt-go.log").strip()
 SHELL_TIMEOUT_SEC = 15
 SHELL_HISTORY_LIMIT = 20
+# EMA factor for CPU smoothing: lower = smoother/slower, higher = snappier.
+CPU_SMOOTH_ALPHA = 0.35
 
 
 # ---------------------------------------------------------------------------
@@ -384,6 +386,10 @@ def inject_style() -> None:
         .uf5-ver {{ display: flex; align-items: center; gap: 12px; }}
         .uf5-ver b {{ font-size: 15px; }}
         section[data-testid="stSidebar"] {{ background: {COLOR_PANEL}; }}
+        /* Smooth bar motion between refreshes (Chromium transitions SVG geometry). */
+        div[data-testid="stAltairChart"] rect, div[data-testid="stVegaLiteChart"] rect {{
+            transition: x .6s ease, y .6s ease, width .6s ease, height .6s ease;
+        }}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -473,7 +479,19 @@ def render_cpu_panel() -> None:
         dt, di = t2 - t1, i2 - i1
         per_core[name] = round((1 - di / dt) * 100, 1) if dt > 0 else 0.0
     dt, di = total2 - total1, idle2 - idle1
-    avg = round((1 - di / dt) * 100, 1) if dt > 0 else 0.0
+    raw_avg = round((1 - di / dt) * 100, 1) if dt > 0 else 0.0
+
+    # EMA smoothing: glide towards new samples instead of jumping.
+    prev = st.session_state.setdefault("uf5_cpu_smooth", {})
+    smooth: dict[str, float] = {}
+    for name, value in per_core.items():
+        old = prev.get(name, value)
+        smooth[name] = round(CPU_SMOOTH_ALPHA * value + (1 - CPU_SMOOTH_ALPHA) * old, 1)
+    smooth["avg"] = round(
+        CPU_SMOOTH_ALPHA * raw_avg + (1 - CPU_SMOOTH_ALPHA) * prev.get("avg", raw_avg), 1)
+    st.session_state["uf5_cpu_smooth"] = smooth
+    per_core = {k: v for k, v in smooth.items() if k != "avg"}
+    avg = smooth["avg"]
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Average load", f"{avg}%")
