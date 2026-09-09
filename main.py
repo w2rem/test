@@ -582,7 +582,7 @@ def inject_style() -> None:
         @keyframes uf5fill {{ from {{ transform: scaleY(0); }} to {{ transform: scaleY(1); }} }}
         /* Drop ghost: gray zone marking how much a bar fell, decrease-only. */
         .uf5-ghost {{ position: absolute; left: 0; right: 0;
-                     background: #B9C4CC; opacity: .8; border-radius: 6px 6px 0 0;
+                     background: #B9C4CC; opacity: .8; border-radius: 8px 8px 0 0;
                      transition: bottom .9s cubic-bezier(.22,.8,.3,1),
                                  height .9s cubic-bezier(.22,.8,.3,1),
                                  opacity 1.6s ease; }}
@@ -692,15 +692,19 @@ def render_cpu_panel() -> None:
             label = re.sub(r"[^a-z0-9]", "", name.lower()) or f"c{i}"
             pct = max(min(value, 100), 0)
             drop = max(min(prev.get(name, value), 100) - pct, 0)
+            has_ghost = drop >= 0.5
+            # Flush joint: flat blue top hugged by the ghost, no seam.
+            fill_radius = "0 0 8px 8px" if has_ghost else "8px"
             ghost = (
                 f'<div class="uf5-ghost" '
                 f'style="bottom:{pct:.1f}%;height:{drop:.1f}%"></div>'
-                if drop >= 0.5 else ""
+                if has_ghost else ""
             )
             bars.append(
                 f'<div class="uf5-col"><div class="uf5-val">{value:.0f}</div>'
                 f'<div class="uf5-track"><div class="uf5-fill" '
-                f'style="height:{pct:.1f}%;animation-delay:{i * 70}ms"></div>'
+                f'style="height:{pct:.1f}%;animation-delay:{i * 70}ms;'
+                f'border-radius:{fill_radius}"></div>'
                 f'{ghost}</div>'
                 f'<div class="uf5-cap">{label}</div></div>'
             )
