@@ -768,15 +768,13 @@ def render_canvas() -> None:
 
 
 def render_geo_cluster() -> None:
-    """Single network card: flag + IP + shard badge, flag watermark behind."""
+    """Network block without card chrome: flag + IP + shard badge, watermark behind."""
     import streamlit as st
 
-    card("Network")
     geo = get_geo()
     cluster = get_cluster()
     if not geo:
         st.caption("geo unavailable")
-        card_end()
         return
     cc = str(geo.get("country_code", ""))
     flag = flag_url(cc)
@@ -796,7 +794,6 @@ def render_geo_cluster() -> None:
         f'</div></div>',
         unsafe_allow_html=True,
     )
-    card_end()
 
 
 def render_versions() -> None:
