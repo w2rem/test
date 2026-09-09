@@ -34,7 +34,6 @@
          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .opt small { color: #6C7A86; margin-left: 8px; }
   .opt.sel, .opt:hover { background: #E8EDEF; }
-  .hint { margin-top: 6px; font-size: 11px; color: #6C7A86; }
 </style>
 </head>
 <body>
@@ -42,10 +41,9 @@
   <div class="line">
     <div class="mirror" id="mirror"><span class="t" id="mt"></span><span class="g" id="mg"></span></div>
     <input id="cmd" autocomplete="off" autocapitalize="off" spellcheck="false"
-           placeholder="" />
+           placeholder="Type a command — Tab completes" />
   </div>
   <div class="drop" id="drop"></div>
-  <div class="hint" id="hint">Tab accepts ghost &middot; Tab again lists options &middot; Enter runs &middot; Esc clears</div>
 </div>
 <script>
 (function () {
@@ -56,15 +54,31 @@
   var mt = document.getElementById('mt');
   var mg = document.getElementById('mg');
   var drop = document.getElementById('drop');
-  var hint = document.getElementById('hint');
-  var renders = 0;
 
-  function diag() {
-    hint.textContent = binaries.length + ' cmds · ' + files.length + ' files · renders ' + renders;
+  function norm(p) {
+    var abs = p.charAt(0) === '/';
+    var parts = p.split('/');
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var s = parts[i];
+      if (!s || s === '.') continue;
+      if (s === '..') { if (out.length) out.pop(); continue; }
+      out.push(s);
+    }
+    return (abs ? '/' : '') + out.join('/');
+  }
+
+  function resolveDir(d) {
+    if (!d) return norm(cwd);
+    if (d.charAt(0) === '/') return norm(d);
+    if (d.charAt(0) === '~') return d;
+    return norm(cwd + '/' + d);
   }
 
   var binaries = [];   // PATH executables, from Python
   var files = [];      // cwd entries, from Python
+  var dirs = {};       // dir listings cache: abs path -> entries, from Python
+  var cwd = '';        // current dir, from Python
   var builtins = ['cd', 'clear', 'history', 'help', 'exit'];
   var ghost = '';
   var matches = [];
@@ -73,7 +87,7 @@
   var dropOpen = false;
 
   function sendHeight() {
-    var h = 42 + 6 + (dropOpen ? Math.min(matches.length, MAX_OPTS) * 33 + 6 : 0) + 24;
+    var h = 42 + 6 + (dropOpen ? Math.min(matches.length, MAX_OPTS) * 33 + 6 : 0);
     parent.postMessage({ isStreamlitMessage: true, type: 'streamlit:setFrameHeight', height: h }, '*');
   }
 
@@ -89,7 +103,10 @@
   function candidates() {
     var t = tokenInfo();
     if (t.first) return builtins.concat(binaries);
-    return files;
+    var slash = t.cur.lastIndexOf('/');
+    if (slash < 0) return files;
+    var list = dirs[resolveDir(t.cur.slice(0, slash))];
+    return list || [];
   }
 
   function rescan() {
@@ -209,19 +226,18 @@
     var data = event.data;
     if (!data || data.type !== 'streamlit:render') return;
     if (data.type === 'streamlit:render') {
-      renders += 1;
       var args = data.args || {};
       binaries = args.binaries || [];
       files = args.files || [];
+      dirs = args.dirs || {};
+      cwd = args.cwd || '';
       rescan();
-      diag();
       sendHeight();
     }
   }
 
   window.addEventListener('message', onRender);
   parent.postMessage({ isStreamlitMessage: true, type: 'streamlit:componentReady', apiVersion: 1 }, '*');
-  diag();
   sendHeight();
 })();
 </script>

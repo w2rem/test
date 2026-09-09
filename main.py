@@ -1040,7 +1040,7 @@ SHELL_COMPONENT_DIR = find_shell_component_dir()
 _shell_component = None
 
 
-def shell_input_component(candidates: list[str], files: list[str], key: str):
+def shell_input_component(candidates: list[str], files: list[str], dirs: dict, cwd: str, key: str):
     """Render the ghost-autocomplete terminal input. Returns submitted cmd or None."""
     global _shell_component
     import streamlit.components.v1 as components
@@ -1049,7 +1049,34 @@ def shell_input_component(candidates: list[str], files: list[str], key: str):
         raise FileNotFoundError("shell_input/index.html not found next to main.py")
     if _shell_component is None:
         _shell_component = components.declare_component("uf5_shell_input", path=SHELL_COMPONENT_DIR)
-    return _shell_component(binaries=candidates, files=files, key=key, default=None)
+    return _shell_component(binaries=candidates, files=files, dirs=dirs, cwd=cwd, key=key, default=None)
+
+
+def build_completion_tree(cwd: str, per_dir: int = 60, max_subs: int = 25) -> dict:
+    """Shallow dir listings for client-side '/' completion: / + cwd + subdirs."""
+    def snap(folder: str) -> list[str]:
+        try:
+            names = sorted(os.listdir(folder))
+        except OSError:
+            return []
+        out = []
+        for name in names:
+            if name.startswith("."):
+                continue
+            out.append(name + "/" if os.path.isdir(os.path.join(folder, name)) else name)
+            if len(out) >= per_dir:
+                break
+        return out
+
+    tree: dict[str, list[str]] = {}
+    tree[os.path.normpath("/")] = snap("/")
+    cwd_norm = os.path.normpath(cwd)
+    tree[cwd_norm] = snap(cwd_norm)
+    for name in tree[cwd_norm][:max_subs]:
+        if name.endswith("/"):
+            sub = os.path.normpath(os.path.join(cwd_norm, name))
+            tree[sub] = snap(sub)
+    return tree
 
 
 def list_cwd_files(cwd: str) -> list[str]:
@@ -1098,9 +1125,9 @@ def render_shell() -> None:
     try:
         submitted = shell_input_component(
             st.session_state["uf5_binaries"], list_cwd_files(cwd),
+            build_completion_tree(cwd), cwd,
             key=f"uf5_shell_in_{st.session_state['uf5_input_nonce']}",
         )
-        st.caption("completion: live (ghost + Tab + list), all data local to this host")
     except Exception as e:  # noqa: BLE001
         component_ok = False
         log_event("error", f"shell component failed ({type(e).__name__}: {e}) — "
