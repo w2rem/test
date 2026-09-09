@@ -40,7 +40,13 @@ COLOR_MEM_USED = "#4A7FA5"  # steel blue — application memory
 COLOR_MEM_CACHE = "#A8C3D1"  # pale steel — page cache / reclaimable
 COLOR_MEM_FREE = "#E8EDEF"  # pale gray — free
 
-ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
+# Bundled runtime icons (inline: zero local-file/network dependency).
+ICON_GO = '''<svg height="78" viewBox="0 0 207 78" width="207" xmlns="http://www.w3.org/2000/svg"><g fill="#211f1f" fill-rule="evenodd"><path d="m16.2 24.1c-.4 0-.5-.2-.3-.5l2.1-2.7c.2-.3.7-.5 1.1-.5h35.7c.4 0 .5.3.3.6l-1.7 2.6c-.2.3-.7.6-1 .6z"/><path d="m1.1 33.3c-.4 0-.5-.2-.3-.5l2.1-2.7c.2-.3.7-.5 1.1-.5h45.6c.4 0 .6.3.5.6l-.8 2.4c-.1.4-.5.6-.9.6z"/><path d="m25.3 42.5c-.4 0-.5-.3-.3-.6l1.4-2.5c.2-.3.6-.6 1-.6h20c.4 0 .6.3.6.7l-.2 2.4c0 .4-.4.7-.7.7z"/><g transform="translate(55)"><path d="m74.1 22.3c-6.3 1.6-10.6 2.8-16.8 4.4-1.5.4-1.6.5-2.9-1-1.5-1.7-2.6-2.8-4.7-3.8-6.3-3.1-12.4-2.2-18.1 1.5-6.8 4.4-10.3 10.9-10.2 19 .1 8 5.6 14.6 13.5 15.7 6.8.9 12.5-1.5 17-6.6.9-1.1 1.7-2.3 2.7-3.7-3.6 0-8.1 0-19.3 0-2.1 0-2.6-1.3-1.9-3 1.3-3.1 3.7-8.3 5.1-10.9.3-.6 1-1.6 2.5-1.6h36.4c-.2 2.7-.2 5.4-.6 8.1-1.1 7.2-3.8 13.8-8.2 19.6-7.2 9.5-16.6 15.4-28.5 17-9.8 1.3-18.9-.6-26.9-6.6-7.4-5.6-11.6-13-12.7-22.2-1.3-10.9 1.9-20.7 8.5-29.3 7.1-9.3 16.5-15.2 28-17.3 9.4-1.7 18.4-.6 26.5 4.9 5.3 3.5 9.1 8.3 11.6 14.1.6.9.2 1.4-1 1.7z"/><path d="m107.2 77.6c-9.1-.2-17.4-2.8-24.4-8.8-5.9-5.1-9.6-11.6-10.8-19.3-1.8-11.3 1.3-21.3 8.1-30.2 7.3-9.6 16.1-14.6 28-16.7 10.2-1.8 19.8-.8 28.5 5.1 7.9 5.4 12.8 12.7 14.1 22.3 1.7 13.5-2.2 24.5-11.5 33.9-6.6 6.7-14.7 10.9-24 12.8-2.7.5-5.4.6-8 .9zm23.8-40.4c-.1-1.3-.1-2.3-.3-3.3-1.8-9.9-10.9-15.5-20.4-13.3-9.3 2.1-15.3 8-17.5 17.4-1.8 7.8 2 15.7 9.2 18.9 5.5 2.4 11 2.1 16.3-.6 7.9-4.1 12.2-10.5 12.7-19.1z" fill-rule="nonzero"/></g></g></svg>'''
+ICON_PYTHON = '''<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g fill="#211f1f" fill-rule="evenodd"><path d="M14.31.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.83l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.23l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05L0 11.97l.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.24l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05 1.07.13zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09-.33.22zM21.1 6.11l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01.21.03zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08-.33.23z"/></g></svg>'''
+ICON_TAILSCALE = '''<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">  <path d="M3.5 17.5C5.43299 17.5 6.99999 15.933 6.99999 14C6.99999 12.067 5.43299 10.5 3.5 10.5C1.567 10.5 0 12.067 0 14C0 15.933 1.567 17.5 3.5 17.5Z" fill="#232222"/>  <path d="M14 17.5C15.933 17.5 17.5 15.933 17.5 14C17.5 12.067 15.933 10.5 14 10.5C12.067 10.5 10.5 12.067 10.5 14C10.5 15.933 12.067 17.5 14 17.5Z" fill="#232222"/>  <path d="M14 28C15.933 28 17.5 26.433 17.5 24.5C17.5 22.567 15.933 21 14 21C12.067 21 10.5 22.567 10.5 24.5C10.5 26.433 12.067 28 14 28Z" fill="#232222"/>  <path d="M24.5 17.5C26.433 17.5 28 15.933 28 14C28 12.067 26.433 10.5 24.5 10.5C22.567 10.5 21 12.067 21 14C21 15.933 22.567 17.5 24.5 17.5Z" fill="#232222"/>  <g opacity="0.4">    <path d="M3.5 28C5.43299 28 6.99999 26.433 6.99999 24.5C6.99999 22.567 5.43299 21 3.5 21C1.567 21 0 22.567 0 24.5C0 26.433 1.567 28 3.5 28Z" fill="#232222"/>    <path d="M24.5 28C26.433 28 28 26.433 28 24.5C28 22.567 26.433 21 24.5 21C22.567 21 21 22.567 21 24.5C21 26.433 22.567 28 24.5 28Z" fill="#232222"/>    <path d="M3.5 6.99999C5.43299 6.99999 6.99999 5.43299 6.99999 3.5C6.99999 1.567 5.43299 0 3.5 0C1.567 0 0 1.567 0 3.5C0 5.43299 1.567 6.99999 3.5 6.99999Z" fill="#232222"/>    <path d="M14 6.99999C15.933 6.99999 17.5 5.43299 17.5 3.5C17.5 1.567 15.933 0 14 0C12.067 0 10.5 1.567 10.5 3.5C10.5 5.43299 12.067 6.99999 14 6.99999Z" fill="#232222"/>    <path d="M24.5 6.99999C26.433 6.99999 28 5.43299 28 3.5C28 1.567 26.433 0 24.5 0C22.567 0 21 1.567 21 3.5C21 5.43299 22.567 6.99999 24.5 6.99999Z" fill="#232222"/>  </g></svg>'''
+
+ICON_SVGS = {"go": ICON_GO, "python": ICON_PYTHON, "tailscale": ICON_TAILSCALE}
+
 GEO_URL = "https://api.ip.sb/geoip"
 GEO_TTL_SEC = 300
 CLUSTER_TTL_SEC = 600
@@ -471,12 +477,9 @@ def shard_color(cluster: str) -> str:
 # ---------------------------------------------------------------------------
 
 def load_icon(name: str, size_px: int = 44, color: str = COLOR_ACCENT) -> str:
-    """Read rebuild/icons/<name>.svg, force one size, recolor dark fills."""
-    path = os.path.join(ICON_DIR, f"{name}.svg")
-    try:
-        with open(path) as f:
-            svg = f.read()
-    except OSError:
+    """Bundled SVG icon, normalized to one size with accent recolor."""
+    svg = ICON_SVGS.get(name, "")
+    if not svg:
         return ""
     svg = re.sub(r'fill="#21\w{4}"', f'fill="{color}"', svg)
     svg = re.sub(r'fill="#23\w{4}"', f'fill="{color}"', svg)
@@ -1014,7 +1017,26 @@ def resolve_cd(target: str, cwd: str) -> str | None:
     return dest if os.path.isdir(dest) else None
 
 
-SHELL_COMPONENT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "components", "shell_input")
+def find_shell_component_dir() -> str:
+    """Locate components/shell_input/index.html next to main.py, in cwd, or above.
+
+    The deployed entry point may live at a different path than this repo
+    (e.g. test/main.py), so several layouts are probed. Empty when missing.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    cands = [
+        os.path.join(here, "components", "shell_input"),
+        os.path.join(os.getcwd(), "uf5vmjt", "components", "shell_input"),
+        os.path.join(os.getcwd(), "components", "shell_input"),
+        os.path.join(here, "..", "uf5vmjt", "components", "shell_input"),
+    ]
+    for cand in cands:
+        if os.path.isfile(os.path.join(cand, "index.html")):
+            return os.path.normpath(cand)
+    return ""
+
+
+SHELL_COMPONENT_DIR = find_shell_component_dir()
 _shell_component = None
 
 
@@ -1023,6 +1045,8 @@ def shell_input_component(candidates: list[str], files: list[str], key: str):
     global _shell_component
     import streamlit.components.v1 as components
 
+    if not SHELL_COMPONENT_DIR:
+        raise FileNotFoundError("shell_input/index.html not found next to main.py")
     if _shell_component is None:
         _shell_component = components.declare_component("uf5_shell_input", path=SHELL_COMPONENT_DIR)
     return _shell_component(binaries=candidates, files=files, key=key, default=None)
@@ -1075,7 +1099,9 @@ def render_shell() -> None:
             st.session_state["uf5_binaries"], list_cwd_files(cwd),
             key=f"uf5_shell_in_{st.session_state['uf5_input_nonce']}",
         )
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        log_event("error", f"shell component failed ({type(e).__name__}: {e}) — "
+                           "ship components/shell_input/index.html next to main.py")
         submitted = None
         st.caption("component unavailable — type + Run:")
         with st.form("uf5_shell_form", clear_on_submit=True):
