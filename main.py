@@ -644,7 +644,7 @@ def inject_style() -> None:
         .uf5-veil {{ position: fixed; inset: 0; z-index: 9999;
                      background: {COLOR_BG}; pointer-events: none;
                      display: flex; align-items: center; justify-content: center;
-                     animation: uf5veil .8s ease forwards; }}
+                     animation: uf5veil 1s ease forwards; }}
         .uf5-veil-line {{ width: 180px; height: 3px; border-radius: 999px;
                           background: {COLOR_ACCENT_PALE}; overflow: hidden;
                           position: relative; }}
@@ -654,11 +654,19 @@ def inject_style() -> None:
                                  animation: uf5sweep .8s ease-in-out infinite; }}
         @keyframes uf5veil {{
             0% {{ opacity: 1; visibility: visible; }}
-            55% {{ opacity: 1; visibility: visible; }}
+            62% {{ opacity: 1; visibility: visible; }}
             100% {{ opacity: 0; visibility: hidden; }}
         }}
         @keyframes uf5sweep {{
             0% {{ left: -40%; }} 100% {{ left: 100%; }}
+        }}
+        /* Skeleton shimmer: staged placeholders while data resolves. */
+        .uf5-sk {{ border-radius: 8px; background: linear-gradient(
+                     100deg, {COLOR_ACCENT_PALE} 40%, #FFFFFF 50%, {COLOR_ACCENT_PALE} 60%);
+                   background-size: 200% 100%;
+                   animation: uf5shimmer 1.2s ease-in-out infinite; }}
+        @keyframes uf5shimmer {{
+            0% {{ background-position: 180% 0; }} 100% {{ background-position: -80% 0; }}
         }}
         /* Content entrance: soft rise on every full render. */
         div[data-testid="stMainBlock"] {{ animation: uf5enter .5s ease backwards; }}
@@ -849,17 +857,27 @@ def render_geo_cluster() -> None:
     """Network block without card chrome: flag + IP + shard badge, watermark behind."""
     import streamlit as st
 
+    # Staged: skeleton first (covers teardown gap), real content on resolve.
+    slot = st.empty()
+    slot.markdown(
+        '<div class="uf5-geocard"><div class="uf5-sk" style="height:26px;width:45%"></div>'
+        '<div style="height:10px"></div>'
+        '<div class="uf5-sk" style="height:15px;width:70%"></div>'
+        '<div style="height:8px"></div>'
+        '<div class="uf5-sk" style="height:13px;width:55%"></div></div>',
+        unsafe_allow_html=True,
+    )
     geo = get_geo()
     cluster = get_cluster()
     if not geo:
-        st.caption("geo unavailable")
+        slot.caption("geo unavailable")
         return
     cc = str(geo.get("country_code", ""))
     flag = flag_url(cc)
     shard = str(cluster.get("cluster", "") or "")
     small = f'<img class="uf5-flag" src="{flag}" alt="{cc}"/>' if flag else ""
     big = f'<img class="uf5-geocard-bg" src="{flag}" alt=""/>' if flag else ""
-    st.markdown(
+    slot.markdown(
         f'<div class="uf5-geocard">{big}'
         f'<div class="uf5-geo-fg">'
         f'<div class="uf5-geo-ip">{small}'
@@ -879,21 +897,24 @@ def render_versions() -> None:
     import streamlit as st
 
     cols = st.columns(3)
-    for col, label, icon, resolver in (
-        (cols[0], "Python", "python", resolve_python_version),
-        (cols[1], "Go", "go", resolve_go_version),
-        (cols[2], "Tailscale", "tailscale", resolve_tailscale_version),
-    ):
-        with col:
-            svg = load_icon(icon)
-            with st.spinner(f"resolving {label.lower()}…"):
-                version = resolver()
-            color = COLOR_OK if version not in ("not installed", "error", "unknown") else COLOR_MUTED
-            st.markdown(
-                f'<div class="uf5-ver">{svg}<span class="uf5-ver-name">{label}</span>'
-                f'{badge(version, color)}</div>',
-                unsafe_allow_html=True)
-            log_event("debug", f"version {label}={version}")
+    slots = [c.empty() for c in cols]
+    for s in slots:
+        s.markdown('<div class="uf5-sk" style="height:44px"></div>',
+                   unsafe_allow_html=True)
+    for slot, (label, icon, resolver) in zip(slots, (
+        ("Python", "python", resolve_python_version),
+        ("Go", "go", resolve_go_version),
+        ("Tailscale", "tailscale", resolve_tailscale_version),
+    )):
+        with st.spinner(f"resolving {label.lower()}…"):
+            version = resolver()
+        svg = load_icon(icon)
+        color = COLOR_OK if version not in ("not installed", "error", "unknown") else COLOR_MUTED
+        slot.markdown(
+            f'<div class="uf5-ver">{svg}<span class="uf5-ver-name">{label}</span>'
+            f'{badge(version, color)}</div>',
+            unsafe_allow_html=True)
+        log_event("debug", f"version {label}={version}")
 
 
 def render_stats() -> None:
