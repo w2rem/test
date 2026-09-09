@@ -1245,6 +1245,14 @@ def main() -> None:
 
     st.set_page_config(page_title="uf5vmjt", layout="wide")
     inject_style()
+    # Publish our own public URL for the keepalive worker: an explicit APP_URL
+    # env wins, otherwise derive https://<host> from the browser URL so a
+    # sidecar in the same container (or the operator copying the log line)
+    # knows what to ping. Never overwrites, never raises.
+    _host = app_host()
+    if _host and not os.environ.get("APP_URL"):
+        os.environ["APP_URL"] = f"https://{_host}"
+        log_event("debug", f"APP_URL set to https://{_host}", source="net")
     # Fresh node on every full rerun -> veil replays on section switches only
     # (fragment ticks never re-execute main, so realtime canvases keep animating).
     st.markdown('<div class="uf5-veil"><div class="uf5-veil-line"></div></div>',
