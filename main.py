@@ -1013,18 +1013,50 @@ def resolve_cd(target: str, cwd: str) -> str | None:
     dest = os.path.abspath(dest)
     return dest if os.path.isdir(dest) else None
 
-def render_shell() -> None:
-    """Terminal-style runner: prompt header, suggestions, styled history.
 
-    Tab-completion cannot be captured by pure Streamlit (no key events), so
-    suggestions render as clickable chips under the prompt: first token
-    completes against real PATH binaries, later tokens against cwd entries.
+SHELL_COMPONENT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "components", "shell_input")
+_shell_component = None
+
+
+def shell_input_component(candidates: list[str], files: list[str], key: str):
+    """Render the ghost-autocomplete terminal input. Returns submitted cmd or None."""
+    global _shell_component
+    import streamlit.components.v1 as components
+
+    if _shell_component is None:
+        _shell_component = components.declare_component("uf5_shell_input", path=SHELL_COMPONENT_DIR)
+    return _shell_component(binaries=candidates, files=files, key=key, default=None)
+
+
+def list_cwd_files(cwd: str) -> list[str]:
+    """Entry names of cwd for client-side path completion (dirs get '/')."""
+    try:
+        names = sorted(os.listdir(cwd))
+    except OSError:
+        return []
+    out = []
+    for name in names:
+        if name.startswith("."):
+            continue
+        out.append(name + "/" if os.path.isdir(os.path.join(cwd, name)) else name)
+    return out
+
+def render_shell() -> None:
+    """Terminal runner: ghost-autocomplete input, persistent cwd, styled history.
+
+    Completion is client-side inside the custom component (ghost text after a
+    pause, Tab to accept/list, live rescan per keystroke). Python only sees
+    the submitted command on Enter.
     """
     import streamlit as st
 
     st.session_state.setdefault("uf5_shell_hist", [])
     st.session_state.setdefault("uf5_cwd", os.getcwd())
+    st.session_state.setdefault("uf5_binaries", None)
+    st.session_state.setdefault("uf5_input_nonce", 0)
     cwd = st.session_state["uf5_cwd"]
+    if st.session_state["uf5_binaries"] is None:
+        st.session_state["uf5_binaries"] = list_path_binaries()
     try:
         user_host = f"{os.getlogin()}@{socket.gethostname()}"
     except OSError:
@@ -1038,38 +1070,24 @@ def render_shell() -> None:
         f'<span style="color:{COLOR_MUTED}">$ · timeout {SHELL_TIMEOUT_SEC}s</span></div>',
         unsafe_allow_html=True,
     )
-    # Suggestion chips live ABOVE the form: clicking one sets the input value
-    # before the widget is instantiated (setting it afterwards would raise).
-    st.session_state.setdefault("uf5_draft", "")
-    draft = st.session_state["uf5_draft"].strip()
-    if draft:
-        matches = suggest_commands(draft, cwd)
-        if matches:
-            st.caption("suggestions from this host (click to fill, Enter to run):")
-            cols = st.columns(min(len(matches), 6))
-            parts = draft.split()
-            for i, cand in enumerate(matches[:6]):
-                label = cand if len(cand) <= 18 else cand[:17] + "…"
-                if cols[i % len(cols)].button(f"`{label}`", key=f"uf5_s_{i}_{label}"):
-                    base = parts[:-1] if len(parts) > 1 else []
-                    st.session_state["uf5_cmd"] = (" ".join(base + [cand]) + ("" if cand.endswith("/") else " "))
-                    st.session_state["uf5_draft"] = st.session_state["uf5_cmd"]
-                    st.rerun()
-            if len(matches) > 6:
-                st.caption(f"+{len(matches) - 6} more — keep typing")
-    with st.form("uf5_shell_form", clear_on_submit=True):
-        cmd = st.text_input("Command", placeholder="ls -la /tmp  (submit prefix first for suggestions)",
-                            label_visibility="collapsed", key="uf5_cmd")
-        run = st.form_submit_button("Run ⏎", width="stretch")
+    try:
+        submitted = shell_input_component(
+            st.session_state["uf5_binaries"], list_cwd_files(cwd),
+            key=f"uf5_shell_in_{st.session_state['uf5_input_nonce']}",
+        )
+    except Exception:  # noqa: BLE001
+        submitted = None
+        st.caption("component unavailable — type + Run:")
+        with st.form("uf5_shell_form", clear_on_submit=True):
+            submitted = st.text_input("Command", label_visibility="collapsed", key="uf5_cmd")
+            if not st.form_submit_button("Run ⏎", width="stretch"):
+                submitted = None
 
-    if run and cmd and cmd.strip():
-        cmd = cmd.strip()
-        st.session_state["uf5_draft"] = cmd
+    # Fresh nonce per submit resets the input; the component only reports
+    # on Enter, so no double-execution guard is needed.
+    if submitted and submitted.strip():
+        cmd = submitted.strip()
         verb = cmd.split()[0]
-        known = st.session_state.setdefault("uf5_binaries", None)
-        if known is None:
-            known = set(list_path_binaries())
-            st.session_state["uf5_binaries"] = known
         if verb == "cd":
             dest = resolve_cd(cmd[2:].strip(), cwd)
             if dest:
@@ -1079,27 +1097,22 @@ def render_shell() -> None:
                 st.session_state["uf5_shell_hist"].append(
                     {"cmd": cmd, "cwd": cwd, "rc": 1,
                      "out": "", "err": f"no such directory: {cmd[2:].strip()}", "ms": 0})
-            st.rerun()
         elif verb == "clear":
             st.session_state["uf5_shell_hist"] = []
-            st.rerun()
         elif verb == "history":
             for i, h in enumerate(st.session_state["uf5_shell_hist"]):
                 st.caption(f"{i + 1}: {h['cmd']}")
         elif verb == "help":
             st.caption("builtins: cd <dir> (absolute, ~, relative, persistent) · "
                        "clear · history · help · any host binary")
-        elif verb not in known:
-            # Unknown verb: do not execute, chips above complete it instead.
-            log_event("warn", f"shell unknown command: {verb}")
-            st.rerun()
         else:
             entry = run_shell_command(cmd, cwd)
             st.session_state["uf5_shell_hist"].append(entry)
             del st.session_state["uf5_shell_hist"][:-SHELL_HISTORY_LIMIT]
             level = "ok" if entry["rc"] == 0 else "error"
             log_event(level, f"shell exit={entry['rc']} ms={entry['ms']}: {cmd[:120]}")
-            st.rerun()
+        st.session_state["uf5_input_nonce"] += 1
+        st.rerun()
 
     for entry in reversed(st.session_state["uf5_shell_hist"]):
         color = COLOR_OK if entry["rc"] == 0 else COLOR_ERR
