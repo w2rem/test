@@ -623,12 +623,12 @@ def inject_style() -> None:
                         background: {COLOR_PANEL}; border: 1px solid {COLOR_BORDER};
                         border-radius: 14px; padding: 16px 18px; margin-bottom: 14px;
                         box-shadow: 0 1px 2px rgba(47,62,70,.05), 0 8px 24px -12px rgba(47,62,70,.18); }}
-        .uf5-geocard-bg {{ position: absolute; inset: 0; display: block;
-                           width: 100%; height: 100%;
-                           object-fit: cover; opacity: .18; pointer-events: none;
-                           user-select: none;
-                           -webkit-mask-image: linear-gradient(to left, black 10%, transparent 85%);
-                           mask-image: linear-gradient(to left, black 10%, transparent 85%); }}
+        .uf5-geocard-bg {{ position: absolute; top: 0; right: 0; display: block;
+                           height: 100%; width: auto; max-width: 62%;
+                           object-fit: contain; object-position: right center;
+                           opacity: .28; pointer-events: none; user-select: none;
+                           -webkit-mask-image: linear-gradient(to right, transparent 0%, black 45%);
+                           mask-image: linear-gradient(to right, transparent 0%, black 45%); }}
         .uf5-geo-fg {{ position: relative; }}
         .uf5-geo-ip {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
         .uf5-flag {{ width: 30px; height: 22px; object-fit: cover; border-radius: 5px;
