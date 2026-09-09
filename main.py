@@ -40,7 +40,7 @@ COLOR_MEM_USED = "#4A7FA5"  # steel blue — application memory
 COLOR_MEM_CACHE = "#A8C3D1"  # pale steel — page cache / reclaimable
 COLOR_MEM_FREE = "#E8EDEF"  # pale gray — free
 
-ICON_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "rebuild", "icons")
+ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
 GEO_URL = "https://api.ip.sb/geoip"
 GEO_TTL_SEC = 300
 CLUSTER_TTL_SEC = 600
@@ -558,9 +558,11 @@ def inject_style() -> None:
 
     st.markdown(
         f"""<style>
-        .stApp {{ background: {COLOR_BG}; color: {COLOR_TEXT}; }}
+        .stApp {{ background: {COLOR_BG}; color: {COLOR_TEXT};
+                 font-variant-numeric: tabular-nums; }}
         .uf5-card {{ background: {COLOR_PANEL}; border: 1px solid {COLOR_BORDER};
-                     border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }}
+                     border-radius: 14px; padding: 16px 18px; margin-bottom: 14px;
+                     box-shadow: 0 1px 2px rgba(47,62,70,.05), 0 8px 24px -12px rgba(47,62,70,.18); }}
         .uf5-title {{ font-size: 13px; font-weight: 600; letter-spacing: .04em;
                       text-transform: uppercase; color: {COLOR_MUTED}; margin-bottom: 8px; }}
         .uf5-big {{ font-size: 22px; font-weight: 700; color: {COLOR_TEXT}; }}
@@ -569,6 +571,7 @@ def inject_style() -> None:
                       font-size: 13px; font-weight: 600; color: #fff; }}
         .uf5-ver {{ display: flex; align-items: center; gap: 12px; }}
         .uf5-ver b {{ font-size: 15px; }}
+        .uf5-ver .uf5-ver-name {{ flex: 1; font-size: 15px; font-weight: 600; }}
         section[data-testid="stSidebar"] {{ background: {COLOR_PANEL}; }}
         /* Water-fill CPU bars: fresh nodes animate 0 -> value every tick. */
         .uf5-row {{ display: flex; align-items: flex-end; gap: 10px; }}
@@ -592,6 +595,18 @@ def inject_style() -> None:
                                  opacity 1.6s ease; }}
         /* Canvas tabs: larger labels, breathing room. */
         button[data-testid="stTab"] {{ font-size: 15px; font-weight: 600; }}
+        /* Instrument-panel metrics: hero numbers, quiet labels. */
+        div[data-testid="stMetricValue"] {{ font-size: 32px; font-weight: 700;
+            font-variant-numeric: tabular-nums; }}
+        div[data-testid="stMetricLabel"] {{ font-size: 12px; letter-spacing: .05em;
+            text-transform: uppercase; color: {COLOR_MUTED}; }}
+        div[data-testid="stMetric"] {{ background: {COLOR_PANEL};
+            border: 1px solid {COLOR_BORDER}; border-radius: 12px; padding: 10px 14px;
+            box-shadow: 0 1px 2px rgba(47,62,70,.05); }}
+        @media (prefers-reduced-motion: reduce) {{
+            .uf5-fill, .uf5-memseg, .uf5-ghost {{ animation: none !important;
+                transition: none !important; }}
+        }}
         /* Memory stacked bar: one 0..max track, animated segment widths. */
         .uf5-memtrack {{ display: flex; height: 44px; background: {COLOR_ACCENT_PALE};
                          border-radius: 999px; overflow: hidden; }}
@@ -606,9 +621,11 @@ def inject_style() -> None:
         /* Geo card: own chrome-free card, flag stretched across it. */
         .uf5-geocard {{ position: relative; overflow: hidden;
                         background: {COLOR_PANEL}; border: 1px solid {COLOR_BORDER};
-                        border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }}
-        .uf5-geocard-bg {{ position: absolute; inset: 0; width: 100%; height: 100%;
-                           object-fit: cover; opacity: .12; pointer-events: none;
+                        border-radius: 14px; padding: 16px 18px; margin-bottom: 14px;
+                        box-shadow: 0 1px 2px rgba(47,62,70,.05), 0 8px 24px -12px rgba(47,62,70,.18); }}
+        .uf5-geocard-bg {{ position: absolute; inset: 0; display: block;
+                           width: 100%; height: 100%;
+                           object-fit: cover; opacity: .18; pointer-events: none;
                            user-select: none;
                            -webkit-mask-image: linear-gradient(to left, black 10%, transparent 85%);
                            mask-image: linear-gradient(to left, black 10%, transparent 85%); }}
@@ -697,7 +714,8 @@ def render_cpu_panel() -> None:
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Average load", f"{avg}%")
-    m2.metric("Busy cores", sum(1 for v in per_core.values() if v >= 5), f"of {len(per_core)}")
+    m2.metric("Busy cores", sum(1 for v in per_core.values() if v >= 5),
+              f"of {len(per_core)}", delta_color="off")
     m3.metric("Free (avg)", f"{100 - avg:.1f}%")
 
     if per_core:
@@ -811,15 +829,13 @@ def render_versions() -> None:
     ):
         with col:
             svg = load_icon(icon)
-            if svg:
-                st.markdown(f'<div class="uf5-ver">{svg}<b>{label}</b></div>',
-                            unsafe_allow_html=True)
-            else:
-                st.markdown(f"**{label}**")
             with st.spinner(f"resolving {label.lower()}…"):
                 version = resolver()
-            st.markdown(badge(version, COLOR_OK if version not in ("not installed", "error", "unknown") else COLOR_MUTED),
-                        unsafe_allow_html=True)
+            color = COLOR_OK if version not in ("not installed", "error", "unknown") else COLOR_MUTED
+            st.markdown(
+                f'<div class="uf5-ver">{svg}<span class="uf5-ver-name">{label}</span>'
+                f'{badge(version, color)}</div>',
+                unsafe_allow_html=True)
             log_event("debug", f"version {label}={version}")
     card_end()
 
