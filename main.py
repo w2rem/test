@@ -940,36 +940,161 @@ def render_stats() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Shell section.
+# Shell section — persistent cwd, host-aware suggestions, styled history.
 # ---------------------------------------------------------------------------
 
+SHELL_BUILTINS = ("cd", "clear", "history", "help", "exit")
+SHELL_SUGGEST_LIMIT = 12
+
+
+def list_path_binaries() -> list[str]:
+    """All executable names on PATH, sorted. No duplicates."""
+    found: set[str] = set()
+    for folder in os.environ.get("PATH", "").split(os.pathsep):
+        if not folder or not os.path.isdir(folder):
+            continue
+        try:
+            with os.scandir(folder) as it:
+                for entry in it:
+                    try:
+                        if entry.is_file(follow_symlinks=False) and os.access(entry.path, os.X_OK):
+                            found.add(entry.name)
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return sorted(found)
+
+
+def suggest_commands(text: str, cwd: str) -> list[str]:
+    """Complete first token against PATH binaries, later tokens against cwd.
+
+    Returns up to SHELL_SUGGEST_LIMIT matches. Pure function (testable).
+    """
+    text = text.strip()
+    if not text:
+        return []
+    parts = text.split()
+    if len(parts) <= 1 and not text.endswith((" ", "\t")):
+        prefix = parts[0] if parts else ""
+        cands = [b for b in SHELL_BUILTINS if b.startswith(prefix)]
+        cands += [b for b in list_path_binaries() if b.startswith(prefix) and b not in cands]
+        return cands[:SHELL_SUGGEST_LIMIT]
+    frag = parts[-1]
+    if "/" in frag:
+        dirpart, tail = frag.rsplit("/", 1)
+        if os.path.isabs(dirpart):
+            folder = dirpart
+        else:
+            folder = os.path.normpath(os.path.join(cwd, os.path.expanduser(dirpart or ".")))
+        prefix = dirpart + "/"
+    else:
+        folder, tail, prefix = cwd, frag, ""
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return []
+    out = []
+    for name in names:
+        if not name.startswith(tail):
+            continue
+        full = os.path.join(folder, name)
+        suffix = "/" if os.path.isdir(full) else ""
+        out.append(prefix + name + suffix)
+        if len(out) >= SHELL_SUGGEST_LIMIT:
+            break
+    return out
+
+
+def resolve_cd(target: str, cwd: str) -> str | None:
+    """Resolve a cd target (absolute, ~, relative) to a real dir or None."""
+    target = os.path.expanduser(target.strip()) or os.path.expanduser("~")
+    dest = target if os.path.isabs(target) else os.path.normpath(os.path.join(cwd, target))
+    dest = os.path.abspath(dest)
+    return dest if os.path.isdir(dest) else None
+
 def render_shell() -> None:
-    """Single command line + rendered history (exit code, stdout, stderr)."""
+    """Terminal-style runner: prompt header, suggestions, styled history.
+
+    Tab-completion cannot be captured by pure Streamlit (no key events), so
+    suggestions render as clickable chips under the prompt: first token
+    completes against real PATH binaries, later tokens against cwd entries.
+    """
     import streamlit as st
 
     st.session_state.setdefault("uf5_shell_hist", [])
     st.session_state.setdefault("uf5_cwd", os.getcwd())
+    cwd = st.session_state["uf5_cwd"]
+    try:
+        user_host = f"{os.getlogin()}@{socket.gethostname()}"
+    except OSError:
+        user_host = socket.gethostname()
 
-    st.caption(f"cwd: `{st.session_state['uf5_cwd']}` · timeout {SHELL_TIMEOUT_SEC}s")
+    st.markdown(
+        f'<div style="font-family:monospace;font-size:13px;margin-bottom:8px;">'
+        f'<span style="color:{COLOR_OK};font-weight:700">{user_host}</span>'
+        f'<span style="color:{COLOR_MUTED}">:</span>'
+        f'<span style="color:{COLOR_ACCENT};font-weight:700">{cwd}</span>'
+        f'<span style="color:{COLOR_MUTED}">$ · timeout {SHELL_TIMEOUT_SEC}s</span></div>',
+        unsafe_allow_html=True,
+    )
+    # Suggestion chips live ABOVE the form: clicking one sets the input value
+    # before the widget is instantiated (setting it afterwards would raise).
+    st.session_state.setdefault("uf5_draft", "")
+    draft = st.session_state["uf5_draft"].strip()
+    if draft:
+        matches = suggest_commands(draft, cwd)
+        if matches:
+            st.caption("suggestions from this host (click to fill, Enter to run):")
+            cols = st.columns(min(len(matches), 6))
+            parts = draft.split()
+            for i, cand in enumerate(matches[:6]):
+                label = cand if len(cand) <= 18 else cand[:17] + "…"
+                if cols[i % len(cols)].button(f"`{label}`", key=f"uf5_s_{i}_{label}"):
+                    base = parts[:-1] if len(parts) > 1 else []
+                    st.session_state["uf5_cmd"] = (" ".join(base + [cand]) + ("" if cand.endswith("/") else " "))
+                    st.session_state["uf5_draft"] = st.session_state["uf5_cmd"]
+                    st.rerun()
+            if len(matches) > 6:
+                st.caption(f"+{len(matches) - 6} more — keep typing")
     with st.form("uf5_shell_form", clear_on_submit=True):
-        cmd = st.text_input("Command", placeholder="ls -la /tmp",
-                            label_visibility="collapsed")
+        cmd = st.text_input("Command", placeholder="ls -la /tmp  (submit prefix first for suggestions)",
+                            label_visibility="collapsed", key="uf5_cmd")
         run = st.form_submit_button("Run ⏎", width="stretch")
+
     if run and cmd and cmd.strip():
         cmd = cmd.strip()
-        if cmd.startswith("cd"):
-            target = cmd[2:].strip() or os.path.expanduser("~")
-            dest = os.path.join(st.session_state["uf5_cwd"], os.path.expanduser(target))
-            if os.path.isdir(dest):
-                st.session_state["uf5_cwd"] = os.path.abspath(dest)
-                log_event("info", f"shell cd -> {st.session_state['uf5_cwd']}")
+        st.session_state["uf5_draft"] = cmd
+        verb = cmd.split()[0]
+        known = st.session_state.setdefault("uf5_binaries", None)
+        if known is None:
+            known = set(list_path_binaries())
+            st.session_state["uf5_binaries"] = known
+        if verb == "cd":
+            dest = resolve_cd(cmd[2:].strip(), cwd)
+            if dest:
+                st.session_state["uf5_cwd"] = dest
+                log_event("info", f"shell cd -> {dest}")
             else:
                 st.session_state["uf5_shell_hist"].append(
-                    {"cmd": cmd, "cwd": st.session_state["uf5_cwd"], "rc": 1,
-                     "out": "", "err": f"no such directory: {target}", "ms": 0})
+                    {"cmd": cmd, "cwd": cwd, "rc": 1,
+                     "out": "", "err": f"no such directory: {cmd[2:].strip()}", "ms": 0})
+            st.rerun()
+        elif verb == "clear":
+            st.session_state["uf5_shell_hist"] = []
+            st.rerun()
+        elif verb == "history":
+            for i, h in enumerate(st.session_state["uf5_shell_hist"]):
+                st.caption(f"{i + 1}: {h['cmd']}")
+        elif verb == "help":
+            st.caption("builtins: cd <dir> (absolute, ~, relative, persistent) · "
+                       "clear · history · help · any host binary")
+        elif verb not in known:
+            # Unknown verb: do not execute, chips above complete it instead.
+            log_event("warn", f"shell unknown command: {verb}")
             st.rerun()
         else:
-            entry = run_shell_command(cmd, st.session_state["uf5_cwd"])
+            entry = run_shell_command(cmd, cwd)
             st.session_state["uf5_shell_hist"].append(entry)
             del st.session_state["uf5_shell_hist"][:-SHELL_HISTORY_LIMIT]
             level = "ok" if entry["rc"] == 0 else "error"
