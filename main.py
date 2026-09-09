@@ -599,6 +599,15 @@ def inject_style() -> None:
                        color: {COLOR_MUTED}; }}
         .uf5-dot {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%;
                     margin-right: 6px; }}
+        /* Geo card: giant translucent flag fading into the background. */
+        .uf5-geo {{ position: relative; overflow: hidden; }}
+        .uf5-geo-bg {{ position: absolute; right: -14px; top: 50%;
+                       transform: translateY(-50%); font-size: 132px; line-height: 1;
+                       opacity: .13; pointer-events: none; user-select: none;
+                       -webkit-mask-image: linear-gradient(to left, black 25%, transparent 95%);
+                       mask-image: linear-gradient(to left, black 25%, transparent 95%); }}
+        .uf5-geo-fg {{ position: relative; }}
+        .uf5-geo-ip {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -753,31 +762,33 @@ def render_canvas() -> None:
 
 
 def render_geo_cluster() -> None:
-    """Geo card (flag + ip/city/country/asn) and Streamlit cluster badge."""
+    """Single network card: flag + IP + shard badge, flag watermark behind."""
     import streamlit as st
 
-    g1, g2 = st.columns(2)
-    with g1:
-        card("Network · Geo")
-        geo = get_geo()
-        if geo:
-            cc = str(geo.get("country_code", ""))
-            st.markdown(f'<div class="uf5-big">{flag_emoji(cc)} {geo.get("ip", "unknown")}</div>',
-                        unsafe_allow_html=True)
-            st.write(f"{geo.get('city', '?')}, {geo.get('country', '?')} ({cc or '?'})")
-            st.caption(f"AS{geo.get('asn', '?')} · {geo.get('asn_organization', 'unknown')}")
-        else:
-            st.caption("geo unavailable")
+    card("Network")
+    geo = get_geo()
+    cluster = get_cluster()
+    if not geo:
+        st.caption("geo unavailable")
         card_end()
-    with g2:
-        card("Streamlit · Cluster")
-        cluster = get_cluster()
-        name = str(cluster.get("cluster", "") or "unknown")
-        st.markdown(badge(name, shard_color(name)), unsafe_allow_html=True)
-        st.caption(f"host: {app_host() or 'local'}")
-        if cluster.get("pythonVersion"):
-            st.caption(f"runtime python: {cluster['pythonVersion'].get('label', '?')}")
-        card_end()
+        return
+    cc = str(geo.get("country_code", ""))
+    flag = flag_emoji(cc)
+    shard = str(cluster.get("cluster", "") or "")
+    st.markdown(
+        f'<div class="uf5-geo"><div class="uf5-geo-bg">{flag}</div>'
+        f'<div class="uf5-geo-fg">'
+        f'<div class="uf5-geo-ip"><span style="font-size:26px">{flag}</span>'
+        f'<span class="uf5-big">{geo.get("ip", "unknown")}</span>'
+        + (badge(shard, shard_color(shard)) if shard != "unknown" else "")
+        + f'</div>'
+        f'<div>{geo.get("city", "?")}, {geo.get("country", "?")} ({cc or "?"})</div>'
+        f'<div class="uf5-muted">AS{geo.get("asn", "?")} · '
+        f'{geo.get("asn_organization", "unknown")}</div>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+    card_end()
 
 
 def render_versions() -> None:
