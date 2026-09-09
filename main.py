@@ -103,6 +103,124 @@ def ingest_go_events() -> int:
 
 
 # ---------------------------------------------------------------------------
+# Go sidecar — ./worker next to the launch dir, background, lines to main.
+# ---------------------------------------------------------------------------
+
+WORKER_PORT = int(os.environ.get("WORKER_PORT", "6549") or 6549)
+WORKER_BIN_ENV = "UF5VMJT_WORKER_BIN"
+_WORKER_PROC = None
+
+
+def find_worker_binary() -> str:
+    """Locate the worker binary: env override, ./worker (launch dir), or next
+    to main.py. Empty when nothing is shipped."""
+    override = (os.environ.get(WORKER_BIN_ENV) or "").strip()
+    if override and os.path.isfile(override):
+        return override
+    here = os.path.dirname(os.path.abspath(__file__))
+    for cand in (os.path.join(os.getcwd(), "worker"),
+                 os.path.join(here, "worker")):
+        if os.path.isfile(cand):
+            return cand
+    return ""
+
+
+def worker_alive() -> bool:
+    """True when our child is running or something answers /health on port."""
+    proc = _WORKER_PROC
+    try:
+        if proc is not None and proc.poll() is None:
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{WORKER_PORT}/health",
+            headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=1) as r:
+            return r.status == 200
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _pump_worker_logs(proc, path: str) -> None:
+    """Forward child stdout lines to the Go JSON-lines log (daemon thread).
+
+    Never touches session_state (wrong context here) — ingest_go_events()
+    tails the file back into the event stream on the script thread.
+    """
+    try:
+        assert proc.stdout is not None
+        with open(path, "a", encoding="utf-8", errors="replace") as f:
+            for line in proc.stdout:
+                text = line.strip()
+                if not text:
+                    continue
+                low = text.lower()
+                level = ("error" if "error" in low or "fatal" in low
+                         else "warn" if "warn" in low else "info")
+                try:
+                    f.write(json.dumps({"level": level, "msg": text[:500]}) + "\n")
+                    f.flush()
+                except OSError:
+                    break
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def ensure_worker() -> None:
+    """Spawn ./worker once per Python process; no-op when already up.
+
+    Child inherits APP_URL (set earlier in main) and gets its own PORT so it
+    never fights the hosting port. Never raises — failures become log lines.
+    """
+    import streamlit as st
+
+    global _WORKER_PROC
+    try:
+        if worker_alive():
+            return
+        if st.session_state.get("uf5_worker_started"):
+            return
+        binary = find_worker_binary()
+        if not binary:
+            if not st.session_state.get("uf5_worker_missing_logged"):
+                st.session_state["uf5_worker_missing_logged"] = True
+                log_event("debug", "no ./worker next to launch dir — sidecar off",
+                          source="go")
+            return
+        try:
+            if not os.access(binary, os.X_OK):
+                os.chmod(binary, 0o755)
+        except OSError:
+            pass
+        env = dict(os.environ)
+        env["PORT"] = str(WORKER_PORT)
+        try:
+            import threading
+
+            proc = subprocess.Popen(
+                [binary], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1, cwd=os.path.dirname(binary) or None,
+                env=env,
+            )
+        except Exception as e:  # noqa: BLE001
+            log_event("warn", f"worker spawn failed: {e}", source="go")
+            return
+        _WORKER_PROC = proc
+        thread = threading.Thread(target=_pump_worker_logs,
+                                  args=(proc, GO_LOG_PATH), daemon=True)
+        thread.start()
+        st.session_state["uf5_worker_started"] = True
+        log_event("ok", f"worker started: {binary} on :{WORKER_PORT}", source="go")
+    except Exception as e:  # noqa: BLE001
+        try:
+            log_event("warn", f"worker ensure failed: {e}", source="go")
+        except Exception:  # noqa: BLE001
+            pass
+
+
+# ---------------------------------------------------------------------------
 # /proc readers — memory, CPU.
 # ---------------------------------------------------------------------------
 
@@ -1253,6 +1371,7 @@ def main() -> None:
     if _host and not os.environ.get("APP_URL"):
         os.environ["APP_URL"] = f"https://{_host}"
         log_event("debug", f"APP_URL set to https://{_host}", source="net")
+    ensure_worker()
     # Fresh node on every full rerun -> veil replays on section switches only
     # (fragment ticks never re-execute main, so realtime canvases keep animating).
     st.markdown('<div class="uf5-veil"><div class="uf5-veil-line"></div></div>',
