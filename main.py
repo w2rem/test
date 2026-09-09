@@ -686,8 +686,6 @@ def render_memory_bar() -> None:
     c2.metric("Used", fmt_mb(used), f"{used / total * 100:.1f}%")
     c3.metric("Cache", fmt_mb(cache), f"{cache / total * 100:.1f}%")
     c4.metric("Free", fmt_mb(free), f"{free / total * 100:.1f}%")
-    with st.expander("Full /proc/meminfo"):
-        st.code("\n".join(f"{k}: {v} kB" for k, v in sorted(mem.items())), language="text")
 
 
 def render_cpu_panel() -> None:
@@ -817,10 +815,9 @@ def render_geo_cluster() -> None:
 
 
 def render_versions() -> None:
-    """Python / Go / Tailscale icons with spinner-while-loading versions."""
+    """Python / Go / Tailscale rows: icon + name + version, no card chrome."""
     import streamlit as st
 
-    card("Runtimes")
     cols = st.columns(3)
     for col, label, icon, resolver in (
         (cols[0], "Python", "python", resolve_python_version),
@@ -837,7 +834,6 @@ def render_versions() -> None:
                 f'{badge(version, color)}</div>',
                 unsafe_allow_html=True)
             log_event("debug", f"version {label}={version}")
-    card_end()
 
 
 def render_stats() -> None:
