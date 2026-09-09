@@ -603,13 +603,15 @@ def inject_style() -> None:
                        color: {COLOR_MUTED}; }}
         .uf5-dot {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%;
                     margin-right: 6px; }}
-        /* Geo card: giant flag image fading into the background. */
-        .uf5-geo {{ position: relative; overflow: hidden; }}
-        .uf5-geo-bg {{ position: absolute; right: -30px; top: 50%;
-                       transform: translateY(-50%); height: 190px;
-                       opacity: .16; pointer-events: none; user-select: none;
-                       -webkit-mask-image: linear-gradient(to left, black 20%, transparent 92%);
-                       mask-image: linear-gradient(to left, black 20%, transparent 92%); }}
+        /* Geo card: own chrome-free card, flag stretched across it. */
+        .uf5-geocard {{ position: relative; overflow: hidden;
+                        background: {COLOR_PANEL}; border: 1px solid {COLOR_BORDER};
+                        border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }}
+        .uf5-geocard-bg {{ position: absolute; inset: 0; width: 100%; height: 100%;
+                           object-fit: cover; opacity: .12; pointer-events: none;
+                           user-select: none;
+                           -webkit-mask-image: linear-gradient(to left, black 10%, transparent 85%);
+                           mask-image: linear-gradient(to left, black 10%, transparent 85%); }}
         .uf5-geo-fg {{ position: relative; }}
         .uf5-geo-ip {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
         .uf5-flag {{ width: 30px; height: 22px; object-fit: cover; border-radius: 5px;
@@ -780,9 +782,9 @@ def render_geo_cluster() -> None:
     flag = flag_url(cc)
     shard = str(cluster.get("cluster", "") or "")
     small = f'<img class="uf5-flag" src="{flag}" alt="{cc}"/>' if flag else ""
-    big = f'<img class="uf5-geo-bg" src="{flag}" alt=""/>' if flag else ""
+    big = f'<img class="uf5-geocard-bg" src="{flag}" alt=""/>' if flag else ""
     st.markdown(
-        f'<div class="uf5-geo">{big}'
+        f'<div class="uf5-geocard">{big}'
         f'<div class="uf5-geo-fg">'
         f'<div class="uf5-geo-ip">{small}'
         f'<span class="uf5-big">{geo.get("ip", "unknown")}</span>'
