@@ -831,24 +831,32 @@ def render_canvas() -> None:
 
     tab_mem, tab_cpu, tab_disk = st.tabs(["Memory", "CPU", "Disk"])
 
+    def _on_stats() -> bool:
+        # Stale auto-timers from a previous section must render nothing —
+        # otherwise their deltas land in a foreign section tree.
+        return st.session_state.get("uf5_section", "stats") == "stats"
+
     with tab_mem:
         @live
         def _live_memory() -> None:
-            render_memory_bar()
+            if _on_stats():
+                render_memory_bar()
 
         _live_memory()
 
     with tab_cpu:
         @live
         def _live_cpu() -> None:
-            render_cpu_panel()
+            if _on_stats():
+                render_cpu_panel()
 
         _live_cpu()
 
     with tab_disk:
         @slow
         def _live_disk() -> None:
-            render_disk_panel()
+            if _on_stats():
+                render_disk_panel()
 
         _live_disk()
 
@@ -898,6 +906,7 @@ def render_versions() -> None:
 
     cols = st.columns(3)
     slots = [c.empty() for c in cols]
+    cached_versions = st.session_state.setdefault("uf5_versions", {})
     for s in slots:
         s.markdown('<div class="uf5-sk" style="height:44px"></div>',
                    unsafe_allow_html=True)
@@ -906,8 +915,11 @@ def render_versions() -> None:
         ("Go", "go", resolve_go_version),
         ("Tailscale", "tailscale", resolve_tailscale_version),
     )):
-        with st.spinner(f"resolving {label.lower()}…"):
-            version = resolver()
+        version = cached_versions.get(label)
+        if not version:
+            with st.spinner(f"resolving {label.lower()}…"):
+                version = resolver()
+            cached_versions[label] = version
         svg = load_icon(icon)
         color = COLOR_OK if version not in ("not installed", "error", "unknown") else COLOR_MUTED
         slot.markdown(
