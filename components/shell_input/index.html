@@ -175,7 +175,7 @@
       var t = tokenInfo();
       if (!t.cur) { matches = []; ghost = ''; selIdx = -1; paint(); return; }
       matches = matchCur(t.cur, t.first);
-      ghost = m.length ? m[0].slice(t.cur.length) : '';
+      ghost = matches.length ? matches[0].slice(t.cur.length) : '';
       selIdx = -1;
       paint();
     }, GHOST_DELAY_MS);
