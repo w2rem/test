@@ -443,12 +443,16 @@ def get_cluster() -> dict:
         return cached
 
 
-def flag_emoji(country_code: str) -> str:
-    """Regional-indicator flag for an ISO country code (e.g. TR -> 🇹🇷)."""
-    code = (country_code or "").strip().upper()
+# Detailed vector flags (hjnilsson/country-flags on GitHub) via jsDelivr CDN.
+FLAG_CDN = "https://cdn.jsdelivr.net/gh/hjnilsson/country-flags/svg"
+
+
+def flag_url(country_code: str) -> str:
+    """CDN URL of a detailed SVG flag, or empty when unknown."""
+    code = (country_code or "").strip().lower()
     if len(code) != 2 or not code.isalpha():
-        return "🏳"
-    return "".join(chr(0x1F1E6 + ord(c) - ord("A")) for c in code)
+        return ""
+    return f"{FLAG_CDN}/{code}.svg"
 
 
 def shard_color(cluster: str) -> str:
@@ -599,15 +603,17 @@ def inject_style() -> None:
                        color: {COLOR_MUTED}; }}
         .uf5-dot {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%;
                     margin-right: 6px; }}
-        /* Geo card: giant translucent flag fading into the background. */
+        /* Geo card: giant flag image fading into the background. */
         .uf5-geo {{ position: relative; overflow: hidden; }}
-        .uf5-geo-bg {{ position: absolute; right: -14px; top: 50%;
-                       transform: translateY(-50%); font-size: 132px; line-height: 1;
-                       opacity: .13; pointer-events: none; user-select: none;
-                       -webkit-mask-image: linear-gradient(to left, black 25%, transparent 95%);
-                       mask-image: linear-gradient(to left, black 25%, transparent 95%); }}
+        .uf5-geo-bg {{ position: absolute; right: -30px; top: 50%;
+                       transform: translateY(-50%); height: 190px;
+                       opacity: .16; pointer-events: none; user-select: none;
+                       -webkit-mask-image: linear-gradient(to left, black 20%, transparent 92%);
+                       mask-image: linear-gradient(to left, black 20%, transparent 92%); }}
         .uf5-geo-fg {{ position: relative; }}
         .uf5-geo-ip {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
+        .uf5-flag {{ width: 30px; height: 22px; object-fit: cover; border-radius: 5px;
+                     box-shadow: 0 1px 4px rgba(0,0,0,.25); }}
         </style>""",
         unsafe_allow_html=True,
     )
@@ -773,12 +779,14 @@ def render_geo_cluster() -> None:
         card_end()
         return
     cc = str(geo.get("country_code", ""))
-    flag = flag_emoji(cc)
+    flag = flag_url(cc)
     shard = str(cluster.get("cluster", "") or "")
+    small = f'<img class="uf5-flag" src="{flag}" alt="{cc}"/>' if flag else ""
+    big = f'<img class="uf5-geo-bg" src="{flag}" alt=""/>' if flag else ""
     st.markdown(
-        f'<div class="uf5-geo"><div class="uf5-geo-bg">{flag}</div>'
+        f'<div class="uf5-geo">{big}'
         f'<div class="uf5-geo-fg">'
-        f'<div class="uf5-geo-ip"><span style="font-size:26px">{flag}</span>'
+        f'<div class="uf5-geo-ip">{small}'
         f'<span class="uf5-big">{geo.get("ip", "unknown")}</span>'
         + (badge(shard, shard_color(shard)) if shard != "unknown" else "")
         + f'</div>'
