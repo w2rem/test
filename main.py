@@ -1094,25 +1094,46 @@ def render_shell() -> None:
         f'<span style="color:{COLOR_MUTED}">$ · timeout {SHELL_TIMEOUT_SEC}s</span></div>',
         unsafe_allow_html=True,
     )
+    component_ok = True
     try:
         submitted = shell_input_component(
             st.session_state["uf5_binaries"], list_cwd_files(cwd),
             key=f"uf5_shell_in_{st.session_state['uf5_input_nonce']}",
         )
+        st.caption("completion: live (ghost + Tab + list), all data local to this host")
     except Exception as e:  # noqa: BLE001
+        component_ok = False
         log_event("error", f"shell component failed ({type(e).__name__}: {e}) — "
                            "ship components/shell_input/index.html next to main.py")
-        submitted = None
-        st.caption("component unavailable — type + Run:")
+        # Basic fallback WITH chips: chips render before the form so a click
+        # may legally preset the input value.
+        st.session_state.setdefault("uf5_draft", "")
+        draft = st.session_state["uf5_draft"].strip()
+        if draft:
+            matches = suggest_commands(draft, cwd)
+            if matches:
+                st.caption("suggestions from this host (click to fill, Enter to run):")
+                cols = st.columns(min(len(matches), 6))
+                parts = draft.split()
+                for i, cand in enumerate(matches[:6]):
+                    label = cand if len(cand) <= 18 else cand[:17] + "…"
+                    if cols[i % len(cols)].button(f"`{label}`", key=f"uf5_s_{i}_{label}"):
+                        base = parts[:-1] if len(parts) > 1 else []
+                        full = " ".join(base + [cand]) + ("" if cand.endswith("/") else " ")
+                        st.session_state["uf5_cmd"] = full
+                        st.session_state["uf5_draft"] = full
+                        st.rerun()
+                if len(matches) > 6:
+                    st.caption(f"+{len(matches) - 6} more — keep typing")
+        st.caption("component unavailable — basic input:")
         with st.form("uf5_shell_form", clear_on_submit=True):
             submitted = st.text_input("Command", label_visibility="collapsed", key="uf5_cmd")
             if not st.form_submit_button("Run ⏎", width="stretch"):
                 submitted = None
 
-    # Fresh nonce per submit resets the input; the component only reports
-    # on Enter, so no double-execution guard is needed.
     if submitted and submitted.strip():
         cmd = submitted.strip()
+        st.session_state["uf5_draft"] = cmd
         verb = cmd.split()[0]
         if verb == "cd":
             dest = resolve_cd(cmd[2:].strip(), cwd)

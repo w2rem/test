@@ -88,6 +88,7 @@
 
   function rescan() {
     var t = tokenInfo();
+    if (!t.cur) { matches = []; ghost = ''; selIdx = -1; paint(); return; }
     var pool = candidates();
     matches = pool.filter(function (c) { return c.indexOf(t.cur) === 0 && c !== t.cur; });
     ghost = matches.length ? matches[0].slice(t.cur.length) : '';
@@ -128,6 +129,7 @@
     paint();
     ghostTimer = setTimeout(function () {
       var t = tokenInfo();
+      if (!t.cur) { matches = []; ghost = ''; selIdx = -1; paint(); return; }
       var pool = candidates();
       var m = pool.filter(function (c) { return c.indexOf(t.cur) === 0 && c !== t.cur; });
       matches = m;
