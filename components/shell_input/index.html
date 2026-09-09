@@ -45,7 +45,7 @@
            placeholder="" />
   </div>
   <div class="drop" id="drop"></div>
-  <div class="hint">Tab accepts ghost &middot; Tab again lists options &middot; Enter runs &middot; Esc clears</div>
+  <div class="hint" id="hint">Tab accepts ghost &middot; Tab again lists options &middot; Enter runs &middot; Esc clears</div>
 </div>
 <script>
 (function () {
@@ -56,6 +56,12 @@
   var mt = document.getElementById('mt');
   var mg = document.getElementById('mg');
   var drop = document.getElementById('drop');
+  var hint = document.getElementById('hint');
+  var renders = 0;
+
+  function diag() {
+    hint.textContent = binaries.length + ' cmds · ' + files.length + ' files · renders ' + renders;
+  }
 
   var binaries = [];   // PATH executables, from Python
   var files = [];      // cwd entries, from Python
@@ -200,16 +206,19 @@
     var data = event.data;
     if (!data || data.isStreamlitMessage !== true) return;
     if (data.type === 'streamlit:render') {
+      renders += 1;
       var args = data.args || {};
       binaries = args.binaries || [];
       files = args.files || [];
       rescan();
+      diag();
       sendHeight();
     }
   }
 
   window.addEventListener('message', onRender);
   parent.postMessage({ isStreamlitMessage: true, type: 'streamlit:componentReady', apiVersion: 1 }, '*');
+  diag();
   sendHeight();
 })();
 </script>
