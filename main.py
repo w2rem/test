@@ -334,11 +334,12 @@ def render_disk_panel() -> None:
     if not fs_list:
         st.caption("disk info unavailable")
         return
-    for fs in fs_list:
+    for idx, fs in enumerate(fs_list):
         total, used, free = fs["total"], fs["used"], fs["free"]
         pct = used / total * 100
-        st.markdown(f"**`{fs['mount']}`**  "
-                    f"<span class='uf5-muted'>{fmt_gb(used)} of {fmt_gb(total)} · {pct:.1f}%</span>",
+        if idx > 0:
+            st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+        st.markdown(f"<span class='uf5-muted'>filesystem</span>  **`{fs['mount']}`**",
                     unsafe_allow_html=True)
         bar = (
             f'<div class="uf5-memseg" title="used {fmt_gb(used)}" '
@@ -347,8 +348,9 @@ def render_disk_panel() -> None:
             f'style="width:{100 - pct:.2f}%;background:{COLOR_ACCENT_PALE}"></div>'
         )
         st.markdown(f'<div class="uf5-memtrack">{bar}</div>', unsafe_allow_html=True)
+        # Every card gets a delta line so all three share one height (symmetry).
         m1, m2, m3 = st.columns(3)
-        m1.metric("Total", fmt_gb(total))
+        m1.metric("Total", fmt_gb(total), "capacity", delta_color="off")
         m2.metric("Used", fmt_gb(used), f"{pct:.1f}%")
         m3.metric("Free", fmt_gb(free), f"{100 - pct:.1f}%")
 
@@ -365,12 +367,14 @@ def render_disk_panel() -> None:
         opacity = round(1 - i * 0.07, 2)
         rows.append(
             f'<div style="display:flex;align-items:center;gap:10px;margin:7px 0;">'
+            f'<div class="uf5-muted" style="width:26px;font-family:monospace;'
+            f'font-size:12px;text-align:right;">{i + 1:02d}</div>'
             f'<div style="width:130px;text-align:right;font-family:monospace;'
             f'font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">/{name}</div>'
             f'<div class="uf5-memtrack" style="height:22px;flex:1;">'
             f'<div class="uf5-memseg" style="width:{size / top * 100:.2f}%;'
             f'background:{COLOR_ACCENT};opacity:{opacity}"></div></div>'
-            f'<div style="width:90px;font-size:12px;font-weight:600;">{fmt_gb(size)}</div></div>'
+            f'<div style="width:90px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;">{fmt_gb(size)}</div></div>'
         )
     st.markdown("".join(rows), unsafe_allow_html=True)
     if truncated:
@@ -750,7 +754,7 @@ def render_memory_bar() -> None:
     )
     st.markdown(f'<div class="uf5-legend">{legend}</div>', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total", fmt_mb(total))
+    c1.metric("Total", fmt_mb(total), "capacity", delta_color="off")
     c2.metric("Used", fmt_mb(used), f"{used / total * 100:.1f}%")
     c3.metric("Cache", fmt_mb(cache), f"{cache / total * 100:.1f}%")
     c4.metric("Free", fmt_mb(free), f"{free / total * 100:.1f}%")
