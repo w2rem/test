@@ -100,20 +100,41 @@
     return { cur: cur, first: first, head: trailing ? v : v.slice(0, v.length - cur.length) };
   }
 
-  function candidates() {
-    var t = tokenInfo();
-    if (t.first) return builtins.concat(binaries);
-    var slash = t.cur.lastIndexOf('/');
-    if (slash < 0) return files;
-    var list = dirs[resolveDir(t.cur.slice(0, slash))];
+  function poolFor(first, dirkey) {
+    if (first) return builtins.concat(binaries);
+    if (dirkey === null) return files;
+    var list = dirs[dirkey];
     return list || [];
+  }
+
+  function splitCur(cur) {
+    var slash = cur.lastIndexOf('/');
+    if (slash < 0) return { dir: null, tail: cur, prefix: '', abs: false };
+    var dir = cur.slice(0, slash);
+    return { dir: dir, tail: cur.slice(slash + 1), prefix: dir ? dir + '/' : '/',
+             abs: cur.charAt(0) === '/' };
+  }
+
+  function matchCur(cur, first) {
+    var s = splitCur(cur);
+    var key = first ? null : (s.dir === null ? null : (s.abs && !s.dir ? '/' : resolveDir(s.dir)));
+    var pool = poolFor(first, key);
+    var out = [];
+    for (var i = 0; i < pool.length; i++) {
+      var c = pool[i];
+      if (s.dir === null || first) {
+        if (c.indexOf(s.tail) === 0 && c !== cur) out.push(c);
+      } else {
+        if (c.indexOf(s.tail) === 0) out.push(s.prefix + c);
+      }
+    }
+    return out;
   }
 
   function rescan() {
     var t = tokenInfo();
     if (!t.cur) { matches = []; ghost = ''; selIdx = -1; paint(); return; }
-    var pool = candidates();
-    matches = pool.filter(function (c) { return c.indexOf(t.cur) === 0 && c !== t.cur; });
+    matches = matchCur(t.cur, t.first);
     ghost = matches.length ? matches[0].slice(t.cur.length) : '';
     selIdx = -1;
     paint();
@@ -153,9 +174,7 @@
     ghostTimer = setTimeout(function () {
       var t = tokenInfo();
       if (!t.cur) { matches = []; ghost = ''; selIdx = -1; paint(); return; }
-      var pool = candidates();
-      var m = pool.filter(function (c) { return c.indexOf(t.cur) === 0 && c !== t.cur; });
-      matches = m;
+      matches = matchCur(t.cur, t.first);
       ghost = m.length ? m[0].slice(t.cur.length) : '';
       selIdx = -1;
       paint();
@@ -185,8 +204,7 @@
   input.addEventListener('input', function () {
     closeDrop();
     var t = tokenInfo();
-    var pool = candidates();
-    matches = pool.filter(function (c) { return c.indexOf(t.cur) === 0 && c !== t.cur; });
+    matches = t.cur ? matchCur(t.cur, t.first) : [];
     selIdx = -1;
     setGhostTimer();
     paint();
