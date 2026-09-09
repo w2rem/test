@@ -595,6 +595,39 @@ def inject_style() -> None:
                                  opacity 1.6s ease; }}
         /* Canvas tabs: larger labels, breathing room. */
         button[data-testid="stTab"] {{ font-size: 15px; font-weight: 600; }}
+        /* Sidebar nav: icon list, no radio dots, no emoji. */
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child {{
+            display: none;
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label {{
+            display: flex !important; align-items: center; gap: 10px;
+            padding: 9px 12px !important; border-radius: 10px;
+            font-size: 14px; font-weight: 600; color: {COLOR_TEXT};
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {{
+            background: {COLOR_ACCENT_PALE};
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked) {{
+            background: {COLOR_ACCENT}; color: #fff;
+            box-shadow: 0 4px 12px -4px rgba(74,127,165,.6);
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label::before {{
+            content: ""; width: 17px; height: 17px; flex: none;
+            background-size: contain; background-repeat: no-repeat;
+            background-position: center;
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(1)::before {{
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M5 20v-6M11 20V5M17 20v-9'/%3E%3C/svg%3E");
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(2)::before {{
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='3'/%3E%3Cpath d='M7 10l3 3-3 3M12 16h5'/%3E%3C/svg%3E");
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(3)::before {{
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01'/%3E%3C/svg%3E");
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked)::before {{
+            filter: brightness(0) invert(1);
+        }}
         /* Instrument-panel metrics: hero numbers, quiet labels. */
         div[data-testid="stMetricValue"] {{ font-size: 32px; font-weight: 700;
             font-variant-numeric: tabular-nums; }}
@@ -938,9 +971,6 @@ def main() -> None:
     inject_style()
 
     section = st.sidebar.radio("Section", ["stats", "shell", "logs"],
-                               format_func=lambda s: {"stats": "📊 stats",
-                                                      "shell": "💻 shell",
-                                                      "logs": "📋 logs"}[s],
                                key="uf5_section")
     st.sidebar.divider()
     log_event("debug", f"section opened: {section}")
