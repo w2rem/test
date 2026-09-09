@@ -580,6 +580,12 @@ def inject_style() -> None:
         .uf5-cap {{ margin-top: 6px; font-size: 11px; color: {COLOR_MUTED}; }}
         .uf5-val {{ font-size: 11px; font-weight: 700; color: {COLOR_TEXT}; margin-bottom: 2px; }}
         @keyframes uf5fill {{ from {{ transform: scaleY(0); }} to {{ transform: scaleY(1); }} }}
+        /* Drop ghost: gray zone marking how much a bar fell, decrease-only. */
+        .uf5-ghost {{ position: absolute; left: 0; right: 0;
+                     background: #B9C4CC; opacity: .8; border-radius: 6px 6px 0 0;
+                     transition: bottom .9s cubic-bezier(.22,.8,.3,1),
+                                 height .9s cubic-bezier(.22,.8,.3,1),
+                                 opacity 1.6s ease; }}
         /* Canvas tabs: larger labels, breathing room. */
         button[data-testid="stTab"] {{ font-size: 15px; font-weight: 600; }}
         /* Memory stacked bar: one 0..max track, animated segment widths. */
@@ -678,18 +684,27 @@ def render_cpu_panel() -> None:
     m3.metric("Free (avg)", f"{100 - avg:.1f}%")
 
     if per_core:
-        # Water-fill bars: raw values; each tick renders fresh nodes that
-        # animate 0 -> value via CSS (no iframe, no reload flash).
+        # Water-fill bars + drop ghost: when a bar decreases, the lost portion
+        # stays visible in gray until the next tick melts it away.
+        prev = st.session_state.get("uf5_cpu_prev", {})
         bars = []
         for i, (name, value) in enumerate(per_core.items()):
             label = re.sub(r"[^a-z0-9]", "", name.lower()) or f"c{i}"
             pct = max(min(value, 100), 0)
+            drop = max(min(prev.get(name, value), 100) - pct, 0)
+            ghost = (
+                f'<div class="uf5-ghost" '
+                f'style="bottom:{pct:.1f}%;height:{drop:.1f}%"></div>'
+                if drop >= 0.5 else ""
+            )
             bars.append(
                 f'<div class="uf5-col"><div class="uf5-val">{value:.0f}</div>'
                 f'<div class="uf5-track"><div class="uf5-fill" '
-                f'style="height:{pct:.1f}%;animation-delay:{i * 70}ms"></div></div>'
+                f'style="height:{pct:.1f}%;animation-delay:{i * 70}ms"></div>'
+                f'{ghost}</div>'
                 f'<div class="uf5-cap">{label}</div></div>'
             )
+        st.session_state["uf5_cpu_prev"] = dict(per_core)
         st.markdown(f'<div class="uf5-row">{"".join(bars)}</div>',
                     unsafe_allow_html=True)
 
