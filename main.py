@@ -628,7 +628,7 @@ def card(title: str) -> None:
 def card_end() -> None:
     import streamlit as st
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 
 def badge(text: str, color: str) -> str:
