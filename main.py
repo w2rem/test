@@ -640,6 +640,33 @@ def inject_style() -> None:
             .uf5-fill, .uf5-memseg, .uf5-ghost {{ animation: none !important;
                 transition: none !important; }}
         }}
+        /* Section transition: veil covers the render, then lifts. */
+        .uf5-veil {{ position: fixed; inset: 0; z-index: 9999;
+                     background: {COLOR_BG}; pointer-events: none;
+                     display: flex; align-items: center; justify-content: center;
+                     animation: uf5veil .8s ease forwards; }}
+        .uf5-veil-line {{ width: 180px; height: 3px; border-radius: 999px;
+                          background: {COLOR_ACCENT_PALE}; overflow: hidden;
+                          position: relative; }}
+        .uf5-veil-line::after {{ content: ""; position: absolute; inset: 0;
+                                 width: 40%; border-radius: 999px;
+                                 background: {COLOR_ACCENT};
+                                 animation: uf5sweep .8s ease-in-out infinite; }}
+        @keyframes uf5veil {{
+            0% {{ opacity: 1; visibility: visible; }}
+            55% {{ opacity: 1; visibility: visible; }}
+            100% {{ opacity: 0; visibility: hidden; }}
+        }}
+        @keyframes uf5sweep {{
+            0% {{ left: -40%; }} 100% {{ left: 100%; }}
+        }}
+        /* Content entrance: soft rise on every full render. */
+        div[data-testid="stMainBlock"] {{ animation: uf5enter .5s ease backwards; }}
+        @keyframes uf5enter {{ from {{ opacity: 0; transform: translateY(10px); }}
+                              to {{ opacity: 1; transform: none; }} }}
+        @media (prefers-reduced-motion: reduce) {{
+            .uf5-veil, div[data-testid="stMainBlock"] {{ animation: none !important; }}
+        }}
         /* Memory stacked bar: one 0..max track, animated segment widths. */
         .uf5-memtrack {{ display: flex; height: 44px; background: {COLOR_ACCENT_PALE};
                          border-radius: 999px; overflow: hidden; }}
@@ -969,6 +996,10 @@ def main() -> None:
 
     st.set_page_config(page_title="uf5vmjt", layout="wide")
     inject_style()
+    # Fresh node on every full rerun -> veil replays on section switches only
+    # (fragment ticks never re-execute main, so realtime canvases keep animating).
+    st.markdown('<div class="uf5-veil"><div class="uf5-veil-line"></div></div>',
+                unsafe_allow_html=True)
 
     section = st.sidebar.radio("Section", ["stats", "shell", "logs"],
                                key="uf5_section")
