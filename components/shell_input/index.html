@@ -203,8 +203,11 @@
   input.addEventListener('blur', function () { setTimeout(closeDrop, 150); });
 
   function onRender(event) {
+    // NOTE: Streamlit posts render as a bare {type, args, ...} with NO
+    // isStreamlitMessage flag (verified in the frontend bundle). Gate on
+    // type only; the flag is required solely for iframe->parent messages.
     var data = event.data;
-    if (!data || data.isStreamlitMessage !== true) return;
+    if (!data || data.type !== 'streamlit:render') return;
     if (data.type === 'streamlit:render') {
       renders += 1;
       var args = data.args || {};
