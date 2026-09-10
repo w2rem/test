@@ -740,19 +740,40 @@ def resolve_go_version() -> str:
 
 
 def worker_pg_verdict() -> dict:
-    """Cached /v1/pg verdict from the local sidecar. Empty when unreachable."""
+    """Cached /v1/pg verdict from the local sidecar. Empty when unreachable.
+
+    The failure reason lands in uf5_pg_note (shown under the versions row),
+    so 'unknown' is always diagnosable: old worker, unconfigured pg, or a
+    sidecar that is not up (yet).
+    """
     import streamlit as st
 
     cached = st.session_state.get("uf5_pg_verdict")
     if isinstance(cached, dict) and cached:
         return cached
+    url = f"http://127.0.0.1:{WORKER_PORT}/v1/pg"
     try:
-        data = fetch_json(f"http://127.0.0.1:{WORKER_PORT}/v1/pg", timeout=3)
+        data = fetch_json(url, timeout=3)
+    except urllib.error.HTTPError as e:
+        detail = f"sidecar http {e.code}"
+        try:
+            body = json.loads(e.read().decode(errors="replace") or "{}")
+            if isinstance(body, dict) and body.get("error"):
+                detail += f": {body['error']}"
+        except (ValueError, OSError):
+            pass
+        if e.code == 404:
+            detail += " (old worker — redeploy for /v1/pg)"
+        st.session_state["uf5_pg_note"] = detail
+        return {}
     except Exception:  # noqa: BLE001
+        st.session_state["uf5_pg_note"] = f"sidecar unreachable on :{WORKER_PORT}"
         return {}
     if isinstance(data, dict) and data.get("version"):
         st.session_state["uf5_pg_verdict"] = data
+        st.session_state.pop("uf5_pg_note", None)
         return data
+    st.session_state["uf5_pg_note"] = "empty verdict"
     return {}
 
 
@@ -1242,7 +1263,9 @@ def render_versions() -> None:
         ("Tailscale", "tailscale", resolve_tailscale_version),
     )):
         version = cached_versions.get(label)
-        if not version:
+        # Unknown/error is retried on the next visit (sidecar may still be
+        # warming up); final answers stay cached.
+        if not version or version in ("unknown", "error"):
             with st.spinner(f"resolving {label.lower()}…"):
                 version = resolver()
             cached_versions[label] = version
@@ -1253,6 +1276,9 @@ def render_versions() -> None:
             f'{badge(version, color)}</div>',
             unsafe_allow_html=True)
         log_event("debug", f"version {label}={version}")
+    note = st.session_state.get("uf5_pg_note")
+    if note:
+        st.caption(f"postgres source: {note}")
 
 
 def render_stats() -> None:
@@ -1557,18 +1583,23 @@ def render_logs() -> None:
             st.session_state["uf5_events"] = []
             st.rerun()
 
+        # Selection lives in session state; the widget is created without a
+        # default so Streamlit never sees default + API value together.
         # New services auto-join the selection; deselected ones stay out.
-        known = set(st.session_state.get("uf5_log_known_sources", []))
-        fresh = [s for s in sources if s not in known]
-        if fresh:
-            current = list(st.session_state.get("uf5_log_sources", sources))
-            current += [s for s in fresh if s not in current]
-            st.session_state["uf5_log_sources"] = current
-            st.session_state["uf5_log_known_sources"] = sorted(known | set(sources))
+        if "uf5_log_sources" not in st.session_state:
+            st.session_state["uf5_log_sources"] = list(sources)
+            st.session_state["uf5_log_known_sources"] = list(sources)
+        else:
+            known = set(st.session_state.get("uf5_log_known_sources", []))
+            fresh = [s for s in sources if s not in known]
+            if fresh:
+                current = list(st.session_state.get("uf5_log_sources", []))
+                current += [s for s in fresh if s not in current]
+                st.session_state["uf5_log_sources"] = current
+                st.session_state["uf5_log_known_sources"] = sorted(known | set(sources))
 
         f1, f2 = st.columns(2)
-        picked = set(f1.multiselect("Service", sources, default=sources,
-                                    key="uf5_log_sources"))
+        picked = set(f1.multiselect("Service", sources, key="uf5_log_sources"))
         order = f2.segmented_control("Order", ["Oldest first", "Newest first"],
                                      default="Oldest first",
                                      key="uf5_log_order")
