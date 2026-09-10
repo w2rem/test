@@ -808,31 +808,16 @@ def inject_style() -> None:
         section[data-testid="stSidebar"], div[data-testid="stSidebarContent"] {{
             background: linear-gradient(180deg, #FFFFFF 0%, {COLOR_PANEL} 78%);
         }}
-        /* Brand: wordmark + live pulse + host line. */
-        .uf5-brand {{ display: flex; align-items: center; gap: 10px;
-                      padding: 6px 4px 2px; }}
-        .uf5-brand-name {{ font-size: 19px; font-weight: 800;
-                           letter-spacing: .16em; color: {COLOR_TEXT}; }}
-        .uf5-live {{ width: 9px; height: 9px; flex: none; border-radius: 50%;
-                     background: {COLOR_OK};
-                     animation: uf5pulse 2.2s ease-out infinite; }}
-        @keyframes uf5pulse {{
-            0% {{ box-shadow: 0 0 0 0 rgba(90,158,111,.45); }}
-            70% {{ box-shadow: 0 0 0 9px rgba(90,158,111,0); }}
-            100% {{ box-shadow: 0 0 0 0 rgba(90,158,111,0); }}
+        /* Sidebar nav cards below. */
+        /* Sidebar nav: option cards only — the widget group label is not
+           an option and stays hidden even under display overrides. */
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:not(:has(input)) {{
+            display: none !important;
         }}
-        .uf5-brand-sub {{ font-size: 12px; color: {COLOR_MUTED};
-                          font-family: monospace; padding: 0 4px 4px;
-                          overflow: hidden; text-overflow: ellipsis;
-                          white-space: nowrap; }}
-        .uf5-nav-title {{ font-size: 11px; font-weight: 700;
-                          letter-spacing: .14em; color: {COLOR_MUTED};
-                          padding: 10px 4px 6px; }}
-        /* Sidebar nav: icon-chip cards, no radio dots, no emoji. */
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child {{
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input) > div:first-child {{
             display: none;
         }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label {{
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input) {{
             display: flex !important; align-items: center; gap: 12px;
             padding: 8px 12px 8px 8px !important; border-radius: 14px;
             border: 1px solid transparent;
@@ -840,7 +825,7 @@ def inject_style() -> None:
             transition: background .22s ease, border-color .22s ease,
                         box-shadow .22s ease, transform .22s ease;
         }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {{
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input):hover {{
             background: #FFFFFF; border-color: {COLOR_BORDER};
             transform: translateX(3px);
         }}
@@ -849,24 +834,30 @@ def inject_style() -> None:
             color: #fff; border-color: transparent;
             box-shadow: 0 8px 20px -8px rgba(74,127,165,.7);
         }}
+        /* Active text stays white: Streamlit nests the caption in its own
+           containers that ignore inherited color. */
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked) p,
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked) div {{
+            color: #fff !important;
+        }}
         section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked)::after {{
             content: "›"; margin-left: auto; font-size: 20px; font-weight: 700;
             opacity: .85; line-height: 1;
         }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label::before {{
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input)::before {{
             content: ""; width: 36px; height: 36px; flex: none;
             border-radius: 11px; background-color: {COLOR_ACCENT_PALE};
             background-size: 19px; background-repeat: no-repeat;
             background-position: center;
             transition: background-color .22s ease;
         }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(1)::before {{
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input):nth-of-type(1)::before {{
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M5 20v-6M11 20V5M17 20v-9'/%3E%3C/svg%3E");
         }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(2)::before {{
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input):nth-of-type(2)::before {{
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='3'/%3E%3Cpath d='M7 10l3 3-3 3M12 16h5'/%3E%3C/svg%3E");
         }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(3)::before {{
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input):nth-of-type(3)::before {{
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01'/%3E%3C/svg%3E");
         }}
         section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked)::before {{
@@ -973,7 +964,7 @@ def inject_style() -> None:
         @keyframes uf5enterL {{ from {{ opacity: 0; transform: translateX(-30px); }}
                                to {{ opacity: 1; transform: none; }} }}
         @media (prefers-reduced-motion: reduce) {{
-            .uf5-veil, .uf5-veil-name, .uf5-live,
+            .uf5-veil, .uf5-veil-name,
             div[data-testid="stMainBlock"] {{ animation: none !important; }}
         }}
         /* Memory stacked bar: one 0..max track, animated segment widths. */
@@ -1713,20 +1704,6 @@ SECTION_ORDER = ["stats", "shell", "logs"]
 SECTION_LABELS = {"stats": "Stats", "shell": "Shell", "logs": "Logs"}
 
 
-def render_sidebar_brand(host: str) -> None:
-    """Wordmark + live pulse + host line above the nav."""
-    import streamlit as st
-
-    st.sidebar.markdown(
-        '<div class="uf5-brand"><span class="uf5-live"></span>'
-        '<span class="uf5-brand-name">uf5vmjt</span></div>'
-        f'<div class="uf5-brand-sub">{host or "local"}</div>',
-        unsafe_allow_html=True,
-    )
-    st.sidebar.markdown('<div class="uf5-nav-title">NAVIGATE</div>',
-                        unsafe_allow_html=True)
-
-
 def section_animation(section: str) -> str:
     """Slide direction vs the previous section (Stats→Shell→Logs = forward).
 
@@ -1759,7 +1736,6 @@ def main() -> None:
     ensure_keepalive_config()
     ensure_worker()
 
-    render_sidebar_brand(_host)
     section = st.sidebar.radio("Navigate", SECTION_ORDER,
                                format_func=SECTION_LABELS.get,
                                label_visibility="collapsed",
