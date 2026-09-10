@@ -16,6 +16,7 @@ import re
 import shutil
 import socket
 import subprocess
+import tarfile
 import time
 import urllib.error
 import urllib.request
@@ -720,6 +721,227 @@ def load_icon(name: str, size_px: int = 44, color: str = COLOR_ACCENT) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Toolchains — GO_VERSION / TS_VERSION pinned under /tmp/bin.
+#
+# main.py itself guarantees the binaries: unset variable means latest for
+# both. Checked fast every run (marker files), downloaded only on cold boot
+# or version change. Never raises — failures become log lines.
+# ---------------------------------------------------------------------------
+
+TOOLCHAIN_DEFAULTS = {"GO_VERSION": "latest", "TS_VERSION": "latest"}
+BIN_ROOT_DIR = "/tmp/bin"
+GO_ROOT_DIR = os.path.join(BIN_ROOT_DIR, "go")
+GO_BIN_PATH = os.path.join(GO_ROOT_DIR, "bin", "go")
+GO_VERSION_FILE = os.path.join(GO_ROOT_DIR, ".version")
+TS_BIN_DIR = os.path.join(BIN_ROOT_DIR, "tailscale")
+TS_BIN_PATH = os.path.join(TS_BIN_DIR, "tailscale")
+TS_DAEMON_PATH = os.path.join(TS_BIN_DIR, "tailscaled")
+TS_VERSION_FILE = os.path.join(TS_BIN_DIR, ".version")
+TS_BASE_URL = "https://pkgs.tailscale.com/stable"
+GO_DL_BASE_URL = "https://go.dev/dl"
+RESOLVE_TTL_SEC = 3600
+_RESOLVED_CACHE: dict = {}
+_TOOLCHAINS_DONE: tuple | None = None
+
+
+def version_var(name: str) -> str:
+    """Version knob from env, else st.secrets, else latest."""
+    value = (os.environ.get(name) or "").strip()
+    if value:
+        return value
+    try:
+        import streamlit as st
+
+        value = str(st.secrets.get(name, "") or "").strip()
+    except Exception:  # noqa: BLE001
+        value = ""
+    return value or TOOLCHAIN_DEFAULTS.get(name, "latest")
+
+
+def _fetch_text(url: str, timeout: float = 15) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": "uf5vmjt/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read().decode(errors="replace")
+
+
+def resolve_ts_latest() -> str:
+    """Newest stable Tailscale (max over the pkgs index options)."""
+    html = _fetch_text(f"{TS_BASE_URL}/")
+    found = re.findall(r'<option value="(\d+\.\d+\.\d+)"', html)
+    if not found:
+        raise ValueError("no versions on pkgs index")
+    return max(found, key=lambda v: tuple(int(p) for p in v.split(".")))
+
+
+def resolve_go_latest() -> str:
+    """Newest stable Go (go.dev/VERSION plain text, first line goX.Y.Z)."""
+    first = _fetch_text("https://go.dev/VERSION?m=text").splitlines()
+    if first:
+        m = re.match(r"^go(\d+\.\d+(?:\.\d+)?)$", first[0].strip())
+        if m:
+            return m.group(1)
+    raise ValueError("bad VERSION body")
+
+
+def _resolve_tool_version(raw: str, kind: str) -> str:
+    """latest|x.y.z (Go allows x.y). Anything else raises ValueError.
+
+    Upstream max is cached per process for an hour: reruns stay at two
+    dict lookups, new releases are picked up within the hour.
+    """
+    want = (raw or "").strip()
+    if want.lower() == "latest":
+        now = time.monotonic()
+        hit = _RESOLVED_CACHE.get(kind)
+        if hit and now - hit[1] < RESOLVE_TTL_SEC:
+            return hit[0]
+        ver = resolve_go_latest() if kind == "go" else resolve_ts_latest()
+        _RESOLVED_CACHE[kind] = (ver, now)
+        return ver
+    pattern = r"^\d+\.\d+(?:\.\d+)?$" if kind == "go" else r"^\d+\.\d+\.\d+$"
+    if re.match(pattern, want):
+        return want
+    raise ValueError(f"bad {kind} version {want!r}: want latest|x.y[.z]")
+
+
+def _machine_arch() -> tuple[str, str]:
+    """Return (go_arch, ts_arch) for this machine."""
+    m = platform.machine().lower()
+    if m in ("aarch64", "arm64"):
+        return "arm64", "arm64"
+    if m in ("armv7l", "arm", "armv6l"):
+        return "armv6l", "arm"
+    return "amd64", "amd64"
+
+
+def _read_marker(path: str) -> str:
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def _write_marker(path: str, version: str) -> None:
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(version.strip() + "\n")
+    except OSError:
+        pass
+
+
+def _download_to(url: str, dest: str, timeout: float = 300) -> None:
+    req = urllib.request.Request(url, headers={"User-Agent": "uf5vmjt/1.0"})
+    os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
+    with urllib.request.urlopen(req, timeout=timeout) as r, open(dest, "wb") as out:
+        shutil.copyfileobj(r, out)
+
+
+def ensure_go_toolchain(want: str) -> str:
+    """Download Go want to /tmp/bin/go unless the marker matches. Returns
+    the go binary path, or empty on failure."""
+    if _read_marker(GO_VERSION_FILE) == want and os.path.isfile(GO_BIN_PATH):
+        return GO_BIN_PATH
+    arch, _ = _machine_arch()
+    url = f"{GO_DL_BASE_URL}/go{want}.linux-{arch}.tar.gz"
+    log_event("info", f"downloading go {want}", source="tool")
+    try:
+        if os.path.isdir(GO_ROOT_DIR):
+            shutil.rmtree(GO_ROOT_DIR)
+        _download_to(url, os.path.join(BIN_ROOT_DIR, f"go{want}.linux-{arch}.tgz"))
+        with tarfile.open(os.path.join(BIN_ROOT_DIR, f"go{want}.linux-{arch}.tgz"), "r:gz") as tf:
+            for member in tf.getmembers():
+                if member.name.startswith("/") or ".." in member.name:
+                    raise ValueError(f"unsafe path in tar: {member.name}")
+            tf.extractall(BIN_ROOT_DIR)
+        try:
+            os.remove(os.path.join(BIN_ROOT_DIR, f"go{want}.linux-{arch}.tgz"))
+        except OSError:
+            pass
+        if not os.path.isfile(GO_BIN_PATH):
+            raise ValueError(f"go binary missing after extract: {GO_BIN_PATH}")
+        os.chmod(GO_BIN_PATH, 0o755)
+        _write_marker(GO_VERSION_FILE, want)
+    except Exception as e:  # noqa: BLE001
+        log_event("warn", f"go {want} setup failed: {e}", source="tool")
+        return ""
+    log_event("ok", f"go {want} ready", source="tool")
+    return GO_BIN_PATH
+
+
+def ensure_tailscale_binaries(want: str) -> str:
+    """Download Tailscale want flat to /tmp/bin/tailscale unless the marker
+    matches. Returns the tailscale binary path, or empty on failure."""
+    if _read_marker(TS_VERSION_FILE) == want and os.path.isfile(TS_BIN_PATH):
+        return TS_BIN_PATH
+    _, arch = _machine_arch()
+    url = f"{TS_BASE_URL}/tailscale_{want}_{arch}.tgz"
+    log_event("info", f"downloading tailscale {want}", source="tool")
+    try:
+        stage = TS_BIN_DIR + ".stage"
+        try:
+            shutil.rmtree(stage)
+        except OSError:
+            pass
+        os.makedirs(stage, exist_ok=True)
+        dest = os.path.join(stage, "tailscale.tgz")
+        _download_to(url, dest)
+        with tarfile.open(dest, "r:gz") as tf:
+            for member in tf.getmembers():
+                if member.name.startswith("/") or ".." in member.name:
+                    raise ValueError(f"unsafe path in tar: {member.name}")
+            tf.extractall(stage)
+        import glob as _glob
+
+        staged = _glob.glob(os.path.join(stage, "tailscale_*", "tailscale"))
+        if not staged:
+            staged = _glob.glob(os.path.join(stage, "tailscale"))
+        if not staged:
+            raise ValueError("extraction did not produce binaries")
+        src_dir = os.path.dirname(staged[0]) if os.path.dirname(staged[0]) != stage else stage
+        src_ts, src_d = os.path.join(src_dir, "tailscale"), os.path.join(src_dir, "tailscaled")
+        if not (os.path.isfile(src_ts) and os.path.isfile(src_d)):
+            raise ValueError("extraction did not produce binaries")
+        os.makedirs(TS_BIN_DIR, exist_ok=True)
+        shutil.move(src_ts, TS_BIN_PATH)
+        shutil.move(src_d, TS_DAEMON_PATH)
+        try:
+            shutil.rmtree(stage)
+        except OSError:
+            pass
+        os.chmod(TS_BIN_PATH, 0o755)
+        os.chmod(TS_DAEMON_PATH, 0o755)
+        _write_marker(TS_VERSION_FILE, want)
+    except Exception as e:  # noqa: BLE001
+        log_event("warn", f"tailscale {want} setup failed: {e}", source="tool")
+        return ""
+    log_event("ok", f"tailscale {want} ready", source="tool")
+    return TS_BIN_PATH
+
+
+def ensure_toolchains() -> None:
+    """Resolve GO_VERSION/TS_VERSION and fetch missing toolchains.
+
+    Fast path (markers match) costs two file reads. Slow path downloads on
+    cold boot only — tracked per process so reruns never refetch. Never
+    raises.
+    """
+    global _TOOLCHAINS_DONE
+    try:
+        go_want = _resolve_tool_version(version_var("GO_VERSION"), "go")
+        ts_want = _resolve_tool_version(version_var("TS_VERSION"), "ts")
+    except Exception as e:  # noqa: BLE001
+        log_event("warn", f"toolchain resolve failed: {e}", source="tool")
+        return
+    if _TOOLCHAINS_DONE == (go_want, ts_want):
+        return
+    ensure_go_toolchain(go_want)
+    ensure_tailscale_binaries(ts_want)
+    _TOOLCHAINS_DONE = (go_want, ts_want)
+
+
+# ---------------------------------------------------------------------------
 # Versions — spinner while resolving, version text after.
 # ---------------------------------------------------------------------------
 
@@ -727,8 +949,14 @@ def resolve_python_version() -> str:
     return platform.python_version()
 
 
+# Versioned toolchains pinned by GO_VERSION / TS_VERSION.
+BIN_GO = "/tmp/bin/go/bin/go"
+BIN_TAILSCALE = "/tmp/bin/tailscale/tailscale"
+
+
 def resolve_go_version() -> str:
-    go = shutil.which("go")
+    """Go version from /tmp/bin/go first, PATH fallback. Never raises."""
+    go = BIN_GO if os.path.isfile(BIN_GO) else shutil.which("go")
     if not go:
         return "not installed"
     try:
@@ -783,7 +1011,9 @@ def resolve_postgres_version() -> str:
 
 
 def resolve_tailscale_version() -> str:
-    ts = shutil.which("tailscale") or shutil.which("tailscaled")
+    """Tailscale version from /tmp/bin/tailscale first, legacy dirs + PATH fallback."""
+    ts = (BIN_TAILSCALE if os.path.isfile(BIN_TAILSCALE)
+          else shutil.which("tailscale") or shutil.which("tailscaled"))
     if not ts:
         for cand in ("/tmp/tailit", os.path.expanduser("~/.local/bin")):
             try:
@@ -1841,6 +2071,7 @@ def main() -> None:
     st.set_page_config(page_title="uf5vmjt", layout="wide")
     inject_style()
     seed_worker_env_from_secrets()
+    ensure_toolchains()
     # Publish our own public URL for the keepalive worker: an explicit APP_URL
     # env wins, otherwise derive https://<host> from the browser URL so a
     # sidecar in the same container (or the operator copying the log line)
