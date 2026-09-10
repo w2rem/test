@@ -804,7 +804,87 @@ def inject_style() -> None:
         .uf5-ver {{ display: flex; align-items: center; gap: 12px; }}
         .uf5-ver b {{ font-size: 15px; }}
         .uf5-ver .uf5-ver-name {{ flex: 1; font-size: 15px; font-weight: 600; }}
-        section[data-testid="stSidebar"] {{ background: {COLOR_PANEL}; }}
+        /* Sidebar: soft studio panel, both testids covered. */
+        section[data-testid="stSidebar"], div[data-testid="stSidebarContent"] {{
+            background: linear-gradient(180deg, #FFFFFF 0%, {COLOR_PANEL} 78%);
+        }}
+        /* Brand: wordmark + live pulse + host line. */
+        .uf5-brand {{ display: flex; align-items: center; gap: 10px;
+                      padding: 6px 4px 2px; }}
+        .uf5-brand-name {{ font-size: 19px; font-weight: 800;
+                           letter-spacing: .16em; color: {COLOR_TEXT}; }}
+        .uf5-live {{ width: 9px; height: 9px; flex: none; border-radius: 50%;
+                     background: {COLOR_OK};
+                     animation: uf5pulse 2.2s ease-out infinite; }}
+        @keyframes uf5pulse {{
+            0% {{ box-shadow: 0 0 0 0 rgba(90,158,111,.45); }}
+            70% {{ box-shadow: 0 0 0 9px rgba(90,158,111,0); }}
+            100% {{ box-shadow: 0 0 0 0 rgba(90,158,111,0); }}
+        }}
+        .uf5-brand-sub {{ font-size: 12px; color: {COLOR_MUTED};
+                          font-family: monospace; padding: 0 4px 4px;
+                          overflow: hidden; text-overflow: ellipsis;
+                          white-space: nowrap; }}
+        .uf5-nav-title {{ font-size: 11px; font-weight: 700;
+                          letter-spacing: .14em; color: {COLOR_MUTED};
+                          padding: 10px 4px 6px; }}
+        /* Sidebar nav: icon-chip cards, no radio dots, no emoji. */
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child {{
+            display: none;
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label {{
+            display: flex !important; align-items: center; gap: 12px;
+            padding: 8px 12px 8px 8px !important; border-radius: 14px;
+            border: 1px solid transparent;
+            font-size: 15px; font-weight: 700; color: {COLOR_TEXT};
+            transition: background .22s ease, border-color .22s ease,
+                        box-shadow .22s ease, transform .22s ease;
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {{
+            background: #FFFFFF; border-color: {COLOR_BORDER};
+            transform: translateX(3px);
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked) {{
+            background: linear-gradient(135deg, {COLOR_ACCENT} 0%, #5E93B5 100%);
+            color: #fff; border-color: transparent;
+            box-shadow: 0 8px 20px -8px rgba(74,127,165,.7);
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked)::after {{
+            content: "›"; margin-left: auto; font-size: 20px; font-weight: 700;
+            opacity: .85; line-height: 1;
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label::before {{
+            content: ""; width: 36px; height: 36px; flex: none;
+            border-radius: 11px; background-color: {COLOR_ACCENT_PALE};
+            background-size: 19px; background-repeat: no-repeat;
+            background-position: center;
+            transition: background-color .22s ease;
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(1)::before {{
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M5 20v-6M11 20V5M17 20v-9'/%3E%3C/svg%3E");
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(2)::before {{
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='3'/%3E%3Cpath d='M7 10l3 3-3 3M12 16h5'/%3E%3C/svg%3E");
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(3)::before {{
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01'/%3E%3C/svg%3E");
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked)::before {{
+            background-color: rgba(255,255,255,.22);
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked)::before {{
+            filter: brightness(0) invert(1);
+        }}
+        /* Sidebar lock: quiet ghost button. */
+        section[data-testid="stSidebar"] div[data-testid="stButton"] button {{
+            background: transparent; border: 1px solid {COLOR_BORDER};
+            color: {COLOR_MUTED}; font-weight: 700; border-radius: 10px;
+            transition: background .2s ease, color .2s ease;
+        }}
+        section[data-testid="stSidebar"] div[data-testid="stButton"] button:hover {{
+            background: {COLOR_ACCENT_PALE}; color: {COLOR_TEXT};
+            border-color: {COLOR_ACCENT_SOFT};
+        }}
         /* Water-fill CPU bars: fresh nodes animate 0 -> value every tick. */
         .uf5-row {{ display: flex; align-items: flex-end; gap: 10px; }}
         .uf5-col {{ flex: 1; display: flex; flex-direction: column; align-items: center; }}
@@ -827,39 +907,6 @@ def inject_style() -> None:
                                  opacity 1.6s ease; }}
         /* Canvas tabs: larger labels, breathing room. */
         button[data-testid="stTab"] {{ font-size: 15px; font-weight: 600; }}
-        /* Sidebar nav: icon list, no radio dots, no emoji. */
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label > div:first-child {{
-            display: none;
-        }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label {{
-            display: flex !important; align-items: center; gap: 10px;
-            padding: 9px 12px !important; border-radius: 10px;
-            font-size: 14px; font-weight: 600; color: {COLOR_TEXT};
-        }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:hover {{
-            background: {COLOR_ACCENT_PALE};
-        }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked) {{
-            background: {COLOR_ACCENT}; color: #fff;
-            box-shadow: 0 4px 12px -4px rgba(74,127,165,.6);
-        }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label::before {{
-            content: ""; width: 17px; height: 17px; flex: none;
-            background-size: contain; background-repeat: no-repeat;
-            background-position: center;
-        }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(1)::before {{
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M5 20v-6M11 20V5M17 20v-9'/%3E%3C/svg%3E");
-        }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(2)::before {{
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='16' rx='3'/%3E%3Cpath d='M7 10l3 3-3 3M12 16h5'/%3E%3C/svg%3E");
-        }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:nth-of-type(3)::before {{
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234A7FA5' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01'/%3E%3C/svg%3E");
-        }}
-        section[data-testid="stSidebar"] div[data-testid="stRadio"] label:has(input:checked)::before {{
-            filter: brightness(0) invert(1);
-        }}
         /* Instrument-panel metrics: hero numbers, quiet labels. */
         div[data-testid="stMetricValue"] {{ font-size: 32px; font-weight: 700;
             font-variant-numeric: tabular-nums; }}
@@ -875,8 +922,24 @@ def inject_style() -> None:
         /* Section transition: veil covers the render, then lifts. */
         .uf5-veil {{ position: fixed; inset: 0; z-index: 9999;
                      background: {COLOR_BG}; pointer-events: none;
-                     display: flex; align-items: center; justify-content: center;
+                     display: flex; flex-direction: column; align-items: center;
+                     justify-content: center; gap: 16px;
                      animation: uf5veil 1s ease forwards; }}
+        .uf5-veil-line {{ width: 180px; height: 3px; border-radius: 999px;
+                          background: {COLOR_ACCENT_PALE}; overflow: hidden;
+                          position: relative; }}
+        .uf5-veil-line::after {{ content: ""; position: absolute; inset: 0;
+                                 width: 40%; border-radius: 999px;
+                                 background: {COLOR_ACCENT};
+                                 animation: uf5sweep .8s ease-in-out infinite; }}
+        .uf5-veil-name {{ font-size: 14px; font-weight: 800;
+                          letter-spacing: .34em; text-transform: uppercase;
+                          color: {COLOR_MUTED}; padding-left: .34em;
+                          animation: uf5veilname .8s ease backwards; }}
+        @keyframes uf5veilname {{
+            from {{ opacity: 0; transform: translateY(6px); }}
+            to {{ opacity: 1; transform: none; }}
+        }}
         .uf5-veil-line {{ width: 180px; height: 3px; border-radius: 999px;
                           background: {COLOR_ACCENT_PALE}; overflow: hidden;
                           position: relative; }}
@@ -900,12 +963,18 @@ def inject_style() -> None:
         @keyframes uf5shimmer {{
             0% {{ background-position: 180% 0; }} 100% {{ background-position: -80% 0; }}
         }}
-        /* Content entrance: soft rise on every full render. */
+        /* Content entrance: soft rise on every full render; main() may
+           override the animation-name with a directional slide. */
         div[data-testid="stMainBlock"] {{ animation: uf5enter .5s ease backwards; }}
         @keyframes uf5enter {{ from {{ opacity: 0; transform: translateY(10px); }}
                               to {{ opacity: 1; transform: none; }} }}
+        @keyframes uf5enterR {{ from {{ opacity: 0; transform: translateX(30px); }}
+                               to {{ opacity: 1; transform: none; }} }}
+        @keyframes uf5enterL {{ from {{ opacity: 0; transform: translateX(-30px); }}
+                               to {{ opacity: 1; transform: none; }} }}
         @media (prefers-reduced-motion: reduce) {{
-            .uf5-veil, div[data-testid="stMainBlock"] {{ animation: none !important; }}
+            .uf5-veil, .uf5-veil-name, .uf5-live,
+            div[data-testid="stMainBlock"] {{ animation: none !important; }}
         }}
         /* Memory stacked bar: one 0..max track, animated segment widths. */
         .uf5-memtrack {{ display: flex; height: 44px; background: {COLOR_ACCENT_PALE};
@@ -1640,6 +1709,39 @@ def render_lock_button() -> None:
 # Entry point.
 # ---------------------------------------------------------------------------
 
+SECTION_ORDER = ["stats", "shell", "logs"]
+SECTION_LABELS = {"stats": "Stats", "shell": "Shell", "logs": "Logs"}
+
+
+def render_sidebar_brand(host: str) -> None:
+    """Wordmark + live pulse + host line above the nav."""
+    import streamlit as st
+
+    st.sidebar.markdown(
+        '<div class="uf5-brand"><span class="uf5-live"></span>'
+        '<span class="uf5-brand-name">uf5vmjt</span></div>'
+        f'<div class="uf5-brand-sub">{host or "local"}</div>',
+        unsafe_allow_html=True,
+    )
+    st.sidebar.markdown('<div class="uf5-nav-title">NAVIGATE</div>',
+                        unsafe_allow_html=True)
+
+
+def section_animation(section: str) -> str:
+    """Slide direction vs the previous section (Stats→Shell→Logs = forward).
+
+    Tracks the last full render in session state; fragment ticks never reach
+    here, so realtime canvases keep animating undisturbed.
+    """
+    import streamlit as st
+
+    prev = st.session_state.get("uf5_section_prev")
+    st.session_state["uf5_section_prev"] = section
+    if not prev or prev == section or prev not in SECTION_ORDER:
+        return "uf5enter"
+    forward = SECTION_ORDER.index(section) > SECTION_ORDER.index(prev)
+    return "uf5enterR" if forward else "uf5enterL"
+
 def main() -> None:
     import streamlit as st
 
@@ -1656,13 +1758,22 @@ def main() -> None:
         log_event("debug", f"APP_URL set to https://{_host}", source="net")
     ensure_keepalive_config()
     ensure_worker()
-    # Fresh node on every full rerun -> veil replays on section switches only
-    # (fragment ticks never re-execute main, so realtime canvases keep animating).
-    st.markdown('<div class="uf5-veil"><div class="uf5-veil-line"></div></div>',
-                unsafe_allow_html=True)
 
-    section = st.sidebar.radio("Section", ["stats", "shell", "logs"],
+    render_sidebar_brand(_host)
+    section = st.sidebar.radio("Navigate", SECTION_ORDER,
+                               format_func=SECTION_LABELS.get,
+                               label_visibility="collapsed",
                                key="uf5_section")
+    anim = section_animation(section)
+    # Fresh veil node on every full rerun -> replays on section switches only
+    # (fragment ticks never re-execute main, so realtime canvases keep animating).
+    st.markdown(f'<div class="uf5-veil"><div class="uf5-veil-line"></div>'
+                f'<div class="uf5-veil-name">{SECTION_LABELS[section]}</div></div>',
+                unsafe_allow_html=True)
+    if anim != "uf5enter":
+        st.markdown(f'<style>div[data-testid="stMainBlock"]{{animation-name:{anim};}}</style>',
+                    unsafe_allow_html=True)
+
     st.sidebar.divider()
     render_lock_button()
     log_event("debug", f"section opened: {section}")
