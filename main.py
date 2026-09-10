@@ -1072,8 +1072,15 @@ def render_cpu_panel() -> None:
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Average load", f"{avg}%")
-    m2.metric("Busy cores", sum(1 for v in per_core.values() if v >= 5),
-              f"of {len(per_core)}", delta_color="off")
+    busy = sum(1 for v in per_core.values() if v >= 5)
+    prev_busy = st.session_state.get("uf5_busy_prev")
+    if prev_busy is None or not isinstance(prev_busy, int):
+        busy_delta = None  # first tick: no history yet
+    else:
+        diff = busy - prev_busy
+        busy_delta = f"{diff:+d}" if diff else "0"
+    st.session_state["uf5_busy_prev"] = busy
+    m2.metric("Busy cores", busy, busy_delta, delta_color="off")
     m3.metric("Free (avg)", f"{100 - avg:.1f}%")
 
     if per_core:
