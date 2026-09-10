@@ -213,7 +213,10 @@ def ensure_worker() -> None:
                                   args=(proc, GO_LOG_PATH), daemon=True)
         thread.start()
         st.session_state["uf5_worker_started"] = True
-        log_event("ok", f"worker started: {binary} on :{WORKER_PORT}", source="go")
+        log_event("ok", f"worker started: {binary} on :{WORKER_PORT} "
+                        f"app={os.environ.get('APP_URL', '?')} "
+                        f"every={os.environ.get('UP_EVERY', '?')} min",
+                  source="go")
     except Exception as e:  # noqa: BLE001
         try:
             log_event("warn", f"worker ensure failed: {e}", source="go")
@@ -622,10 +625,12 @@ def ensure_keepalive_config() -> None:
         st.session_state["uf5_cluster"] = data
         st.session_state["uf5_cluster_ts"] = time.monotonic()
         if not os.environ.get("UP_EVERY"):
-            os.environ["UP_EVERY"] = "10m"
-            log_event("debug", "UP_EVERY defaulted to 10m", source="net")
+            os.environ["UP_EVERY"] = "10"
+            log_event("debug", "UP_EVERY defaulted to 10 min", source="net")
+        every = (os.environ.get("UP_EVERY") or "10").strip()
+        display = f"{every} min" if every.isdigit() else every
         log_event("ok", f"app visible on {data.get('cluster', '?')} — "
-                        f"keepalive every {os.environ.get('UP_EVERY')}",
+                        f"keepalive every {display}",
                   source="net")
     elif code == 404 and not token:
         log_event("warn", "app invisible anonymously (disambiguate 404) — "
