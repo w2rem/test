@@ -1080,7 +1080,7 @@ def render_cpu_panel() -> None:
         diff = busy - prev_busy
         busy_delta = f"{diff:+d}" if diff else "0"
     st.session_state["uf5_busy_prev"] = busy
-    m2.metric("Busy cores", busy, busy_delta, delta_color="off")
+    m2.metric("Busy cores", busy, busy_delta, delta_color="normal")
     m3.metric("Free (avg)", f"{100 - avg:.1f}%")
 
     if per_core:
