@@ -15,6 +15,7 @@ import shutil
 import socket
 import subprocess
 import time
+import urllib.error
 import urllib.request
 from stat import S_ISDIR, S_ISLNK
 from urllib.parse import urlparse
@@ -569,6 +570,73 @@ def get_cluster() -> dict:
     except Exception as e:  # noqa: BLE001
         log_event("warn", f"disambiguate failed: {e}", source="net")
         return cached
+
+
+def probe_disambiguate(host: str, token: str) -> tuple[int, dict]:
+    """GET /api/v2/app/disambiguate. Returns (http_code, body).
+
+    -1 on transport error. Token goes into the Cookie header, never logs.
+    Never raises.
+    """
+    headers = {"User-Agent": "uf5vmjt/1.0", "Accept": "application/json"}
+    if token:
+        headers["Cookie"] = f"streamlit_session={token}"
+    req = urllib.request.Request(f"https://{host}/api/v2/app/disambiguate",
+                                 headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            try:
+                return r.status, json.loads(r.read().decode(errors="replace"))
+            except ValueError:
+                return r.status, {}
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read().decode(errors="replace")
+            return e.code, json.loads(body) if body else {}
+        except (ValueError, OSError):
+            return e.code, {}
+    except Exception:  # noqa: BLE001
+        return -1, {}
+
+
+def ensure_keepalive_config() -> None:
+    """Probe app visibility once per session, then fix the keepalive config.
+
+    Anonymous 404 -> warn the operator to set STREAMLIT_SESSION_TOKEN.
+    Resolved app -> default UP_EVERY to 10m when unset (child inherits it).
+    Never raises.
+    """
+    import streamlit as st
+
+    if st.session_state.get("uf5_visibility_checked"):
+        return
+    st.session_state["uf5_visibility_checked"] = True
+    host = app_host()
+    if not host:
+        return
+    token = (os.environ.get("STREAMLIT_SESSION_TOKEN")
+             or os.environ.get("STREAMLIT_SESSION") or "")
+    code, data = probe_disambiguate(host, token)
+    if code == 200:
+        # Feed the geo card cache — render_geo_cluster() reuses it, no refetch.
+        st.session_state["uf5_cluster"] = data
+        st.session_state["uf5_cluster_ts"] = time.monotonic()
+        if not os.environ.get("UP_EVERY"):
+            os.environ["UP_EVERY"] = "10m"
+            log_event("debug", "UP_EVERY defaulted to 10m", source="net")
+        log_event("ok", f"app visible on {data.get('cluster', '?')} — "
+                        f"keepalive every {os.environ.get('UP_EVERY')}",
+                  source="net")
+    elif code == 404 and not token:
+        log_event("warn", "app invisible anonymously (disambiguate 404) — "
+                          "if private, set STREAMLIT_SESSION_TOKEN to the owner "
+                          "streamlit_session cookie value", source="net")
+    elif code == 404:
+        log_event("warn", "disambiguate 404 even with session — "
+                          "token expired or app gone", source="net")
+    elif code == -1:
+        log_event("warn", "disambiguate unreachable — keepalive defaults apply",
+                  source="net")
 
 
 # Detailed vector flags (hjnilsson/country-flags on GitHub) via jsDelivr CDN.
@@ -1371,6 +1439,7 @@ def main() -> None:
     if _host and not os.environ.get("APP_URL"):
         os.environ["APP_URL"] = f"https://{_host}"
         log_event("debug", f"APP_URL set to https://{_host}", source="net")
+    ensure_keepalive_config()
     ensure_worker()
     # Fresh node on every full rerun -> veil replays on section switches only
     # (fragment ticks never re-execute main, so realtime canvases keep animating).
