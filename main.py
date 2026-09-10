@@ -109,7 +109,39 @@ def ingest_go_events() -> int:
 
 WORKER_PORT = int(os.environ.get("WORKER_PORT", "6549") or 6549)
 WORKER_BIN_ENV = "UF5VMJT_WORKER_BIN"
+# Env keys the sidecar inherits; missing ones are seeded from st.secrets so a
+# Cloud deploy (secrets-only, no shell env) still configures the worker.
+# Values never hit the logs.
+WORKER_ENV_KEYS = ("PG_DATABASE_URL", "STREAMLIT_SESSION_TOKEN", "STREAMLIT_SESSION",
+                   "APP_HOST", "APP_URL", "UP_EVERY", "WORKER_PORT")
 _WORKER_PROC = None
+
+
+def seed_worker_env_from_secrets() -> None:
+    """Copy WORKER_ENV_KEYS from st.secrets into os.environ when unset.
+
+    Cloud deploys are secrets-only (no shell env); the sidecar inherits
+    os.environ, so without this it would never see PG_DATABASE_URL or the
+    session token. Key names (never values) go to the event log.
+    Never raises.
+    """
+    import streamlit as st
+
+    try:
+        secrets = st.secrets
+    except Exception:  # noqa: BLE001
+        return
+    for key in WORKER_ENV_KEYS:
+        if os.environ.get(key):
+            continue
+        try:
+            value = secrets.get(key, "")
+        except Exception:  # noqa: BLE001
+            continue
+        if value is None or (isinstance(value, str) and not value.strip()):
+            continue
+        os.environ[key] = str(value).strip() if isinstance(value, str) else str(value)
+        log_event("debug", f"secret {key} applied to worker env", source="go")
 
 
 def find_worker_binary() -> str:
@@ -1436,6 +1468,7 @@ def main() -> None:
 
     st.set_page_config(page_title="uf5vmjt", layout="wide")
     inject_style()
+    seed_worker_env_from_secrets()
     # Publish our own public URL for the keepalive worker: an explicit APP_URL
     # env wins, otherwise derive https://<host> from the browser URL so a
     # sidecar in the same container (or the operator copying the log line)
