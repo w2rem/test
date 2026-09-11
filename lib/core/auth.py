@@ -116,8 +116,12 @@ def require_auth() -> bool:
         return True
     st.markdown("**Restricted area** — Shell and Logs need the access token. "
                 "Stats stays public.")
-    token = st.text_input("Access token", type="password", key="uf5_token_input")
-    if st.button("Unlock", key="uf5_unlock"):
+    # Form, not bare widgets: Enter inside the input submits the form, so
+    # keyboard and mouse share one path (bare button ignored Enter entirely).
+    with st.form("uf5_unlock_form", clear_on_submit=False):
+        token = st.text_input("Access token", type="password", key="uf5_token_input")
+        submit = st.form_submit_button("Unlock")
+    if submit:
         if (token or "").strip() and _compare_tokens((token or "").strip(), key):
             exp = int(time.time()) + session_ttl_sec()
             st.session_state["uf5_authed_until"] = exp
