@@ -120,7 +120,9 @@ WORKER_BIN_ENV = "UF5VMJT_WORKER_BIN"
 # Cloud deploy (secrets-only, no shell env) still configures the worker.
 # Values never hit the logs.
 WORKER_ENV_KEYS = ("PG_DATABASE_URL", "STREAMLIT_SESSION_TOKEN", "STREAMLIT_SESSION",
-                   "APP_HOST", "APP_URL", "UP_EVERY", "WORKER_PORT")
+                   "APP_HOST", "APP_URL", "UP_EVERY", "WORKER_PORT",
+                   "TS_VERSION", "TS_CLIENT_ID", "TS_CLIENT_SECRET", "TS_KEY",
+                   "TS_TAILNET", "TS_HOSTNAME_BASE", "TS_HOST", "TS_SERVE_PORT")
 _WORKER_PROC = None
 
 
@@ -721,11 +723,13 @@ def load_icon(name: str, size_px: int = 44, color: str = COLOR_ACCENT) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Toolchains — GO_VERSION / TS_VERSION pinned under /tmp/bin.
+# Toolchains — GO_VERSION pinned under /tmp/bin.
 #
-# main.py itself guarantees the binaries: unset variable means latest for
-# both. Checked fast every run (marker files), downloaded only on cold boot
-# or version change. Never raises — failures become log lines.
+# main.py guarantees Go: unset variable means latest. Checked fast every run
+# (marker file), downloaded only on cold boot or version change. Tailscale
+# moved to the worker (POST /v1/tailscale) — the panel only triggers an
+# update and reads the version from the sidecar status. Never raises —
+# failures become log lines.
 # ---------------------------------------------------------------------------
 
 TOOLCHAIN_DEFAULTS = {"GO_VERSION": "latest", "TS_VERSION": "latest"}
@@ -733,11 +737,6 @@ BIN_ROOT_DIR = "/tmp/bin"
 GO_ROOT_DIR = os.path.join(BIN_ROOT_DIR, "go")
 GO_BIN_PATH = os.path.join(GO_ROOT_DIR, "bin", "go")
 GO_VERSION_FILE = os.path.join(GO_ROOT_DIR, ".version")
-TS_BIN_DIR = os.path.join(BIN_ROOT_DIR, "tailscale")
-TS_BIN_PATH = os.path.join(TS_BIN_DIR, "tailscale")
-TS_DAEMON_PATH = os.path.join(TS_BIN_DIR, "tailscaled")
-TS_VERSION_FILE = os.path.join(TS_BIN_DIR, ".version")
-TS_BASE_URL = "https://pkgs.tailscale.com/stable"
 GO_DL_BASE_URL = "https://go.dev/dl"
 RESOLVE_TTL_SEC = 3600
 # Lock dir: at most one run (any session, any process) downloads at a time.
@@ -797,15 +796,6 @@ def _fetch_text(url: str, timeout: float = 15) -> str:
         return r.read().decode(errors="replace")
 
 
-def resolve_ts_latest() -> str:
-    """Newest stable Tailscale (max over the pkgs index options)."""
-    html = _fetch_text(f"{TS_BASE_URL}/")
-    found = re.findall(r'<option value="(\d+\.\d+\.\d+)"', html)
-    if not found:
-        raise ValueError("no versions on pkgs index")
-    return max(found, key=lambda v: tuple(int(p) for p in v.split(".")))
-
-
 def resolve_go_latest() -> str:
     """Newest stable Go (go.dev/VERSION plain text, first line goX.Y.Z)."""
     first = _fetch_text("https://go.dev/VERSION?m=text").splitlines()
@@ -817,7 +807,7 @@ def resolve_go_latest() -> str:
 
 
 def _resolve_tool_version(raw: str, kind: str) -> str:
-    """latest|x.y.z (Go allows x.y). Anything else raises ValueError.
+    """latest|x.y[.z] for Go. Anything else raises ValueError.
 
     Upstream max is cached per process for an hour: reruns stay at two
     dict lookups, new releases are picked up within the hour.
@@ -828,23 +818,22 @@ def _resolve_tool_version(raw: str, kind: str) -> str:
         hit = _RESOLVED_CACHE.get(kind)
         if hit and now - hit[1] < RESOLVE_TTL_SEC:
             return hit[0]
-        ver = resolve_go_latest() if kind == "go" else resolve_ts_latest()
+        ver = resolve_go_latest()
         _RESOLVED_CACHE[kind] = (ver, now)
         return ver
-    pattern = r"^\d+\.\d+(?:\.\d+)?$" if kind == "go" else r"^\d+\.\d+\.\d+$"
-    if re.match(pattern, want):
+    if re.match(r"^\d+\.\d+(?:\.\d+)?$", want):
         return want
     raise ValueError(f"bad {kind} version {want!r}: want latest|x.y[.z]")
 
 
-def _machine_arch() -> tuple[str, str]:
-    """Return (go_arch, ts_arch) for this machine."""
+def _machine_arch() -> str:
+    """Return the Go arch for this machine."""
     m = platform.machine().lower()
     if m in ("aarch64", "arm64"):
-        return "arm64", "arm64"
+        return "arm64"
     if m in ("armv7l", "arm", "armv6l"):
-        return "armv6l", "arm"
-    return "amd64", "amd64"
+        return "armv6l"
+    return "amd64"
 
 
 def _read_marker(path: str) -> str:
@@ -876,7 +865,7 @@ def ensure_go_toolchain(want: str) -> str:
     the go binary path, or empty on failure."""
     if _read_marker(GO_VERSION_FILE) == want and os.path.isfile(GO_BIN_PATH):
         return GO_BIN_PATH
-    arch, _ = _machine_arch()
+    arch = _machine_arch()
     url = f"{GO_DL_BASE_URL}/go{want}.linux-{arch}.tar.gz"
     log_event("info", f"downloading go {want}", source="tool")
     try:
@@ -903,71 +892,21 @@ def ensure_go_toolchain(want: str) -> str:
     return GO_BIN_PATH
 
 
-def ensure_tailscale_binaries(want: str) -> str:
-    """Download Tailscale want flat to /tmp/bin/tailscale unless the marker
-    matches. Returns the tailscale binary path, or empty on failure."""
-    if _read_marker(TS_VERSION_FILE) == want and os.path.isfile(TS_BIN_PATH):
-        return TS_BIN_PATH
-    _, arch = _machine_arch()
-    url = f"{TS_BASE_URL}/tailscale_{want}_{arch}.tgz"
-    log_event("info", f"downloading tailscale {want}", source="tool")
-    try:
-        stage = TS_BIN_DIR + ".stage"
-        try:
-            shutil.rmtree(stage)
-        except OSError:
-            pass
-        os.makedirs(stage, exist_ok=True)
-        dest = os.path.join(stage, "tailscale.tgz")
-        _download_to(url, dest)
-        with tarfile.open(dest, "r:gz") as tf:
-            for member in tf.getmembers():
-                if member.name.startswith("/") or ".." in member.name:
-                    raise ValueError(f"unsafe path in tar: {member.name}")
-            tf.extractall(stage)
-        import glob as _glob
-
-        staged = _glob.glob(os.path.join(stage, "tailscale_*", "tailscale"))
-        if not staged:
-            staged = _glob.glob(os.path.join(stage, "tailscale"))
-        if not staged:
-            raise ValueError("extraction did not produce binaries")
-        src_dir = os.path.dirname(staged[0]) if os.path.dirname(staged[0]) != stage else stage
-        src_ts, src_d = os.path.join(src_dir, "tailscale"), os.path.join(src_dir, "tailscaled")
-        if not (os.path.isfile(src_ts) and os.path.isfile(src_d)):
-            raise ValueError("extraction did not produce binaries")
-        os.makedirs(TS_BIN_DIR, exist_ok=True)
-        shutil.move(src_ts, TS_BIN_PATH)
-        shutil.move(src_d, TS_DAEMON_PATH)
-        try:
-            shutil.rmtree(stage)
-        except OSError:
-            pass
-        os.chmod(TS_BIN_PATH, 0o755)
-        os.chmod(TS_DAEMON_PATH, 0o755)
-        _write_marker(TS_VERSION_FILE, want)
-    except Exception as e:  # noqa: BLE001
-        log_event("warn", f"tailscale {want} setup failed: {e}", source="tool")
-        return ""
-    log_event("ok", f"tailscale {want} ready", source="tool")
-    return TS_BIN_PATH
-
-
 def ensure_toolchains() -> None:
-    """Resolve GO_VERSION/TS_VERSION and fetch missing toolchains.
+    """Resolve GO_VERSION and fetch the Go toolchain; Tailscale is owned by
+    the worker (POST /v1/tailscale), here we only nudge it once per process.
 
-    Fast path (markers match) costs two file reads. Slow path downloads on
-    cold boot only — once per process fingerprint, serialized by a lock dir
-    so concurrent reruns never trample each other's trees. Never raises.
+    Fast path (marker match) costs one file read. Slow path downloads on
+    cold boot only — serialized by a lock dir so concurrent reruns never
+    trample the tree. Never raises.
     """
     global _TOOLCHAINS_DONE
     try:
         go_want = _resolve_tool_version(version_var("GO_VERSION"), "go")
-        ts_want = _resolve_tool_version(version_var("TS_VERSION"), "ts")
     except Exception as e:  # noqa: BLE001
         log_event("warn", f"toolchain resolve failed: {e}", source="tool")
         return
-    if _TOOLCHAINS_DONE == (go_want, ts_want):
+    if _TOOLCHAINS_DONE == go_want:
         return
     if not _acquire_toolchain_lock():
         log_event("debug", "toolchain setup running elsewhere — retry next run",
@@ -975,10 +914,50 @@ def ensure_toolchains() -> None:
         return
     try:
         ensure_go_toolchain(go_want)
-        ensure_tailscale_binaries(ts_want)
-        _TOOLCHAINS_DONE = (go_want, ts_want)
+        _TOOLCHAINS_DONE = go_want
     finally:
         _release_toolchain_lock()
+    trigger_tailscale_update()
+
+
+_TS_UPDATE_SENT = False
+
+
+def trigger_tailscale_update() -> None:
+    """Nudge the sidecar to refresh /tmp/bin/tailscale (fire-and-forget).
+
+    The worker answers 202 immediately and downloads detached, so the panel
+    never blocks on the 25 MB fetch. Once per Python process. Never raises.
+    """
+    global _TS_UPDATE_SENT
+    if _TS_UPDATE_SENT:
+        return
+    _TS_UPDATE_SENT = True
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{WORKER_PORT}/v1/tailscale",
+            data=json.dumps({"func": "update"}).encode(),
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            if r.status == 202:
+                log_event("debug", "tailscale update triggered on sidecar",
+                          source="tool")
+    except Exception as e:  # noqa: BLE001
+        log_event("debug", f"tailscale trigger skipped: {e}", source="tool")
+
+
+def worker_ts_status() -> dict:
+    """Sidecar tailscale snapshot (func=status). Empty when unreachable."""
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{WORKER_PORT}/v1/tailscale",
+            data=json.dumps({"func": "status"}).encode(),
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=2) as r:
+            data = json.loads(r.read().decode(errors="replace"))
+            return data if isinstance(data, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -1051,7 +1030,14 @@ def resolve_postgres_version() -> str:
 
 
 def resolve_tailscale_version() -> str:
-    """Tailscale version from /tmp/bin/tailscale first, legacy dirs + PATH fallback."""
+    """Tailscale version from the sidecar status first, local binary fallback.
+
+    The worker owns /tmp/bin/tailscale; both share /tmp, so the local probe
+    still works when the sidecar is down. Never raises.
+    """
+    st = worker_ts_status()
+    if isinstance(st.get("installed"), str) and st["installed"]:
+        return st["installed"]
     ts = (BIN_TAILSCALE if os.path.isfile(BIN_TAILSCALE)
           else shutil.which("tailscale") or shutil.which("tailscaled"))
     if not ts:
