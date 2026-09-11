@@ -134,11 +134,12 @@ def ensure_toolchains() -> None:
     """Resolve GO_VERSION and fetch the Go toolchain; Tailscale is owned by
     the worker (POST /v1/tailscale), here we only nudge it once per process.
 
-    Fast path (marker match) costs one file read. Slow path downloads on
-    cold boot only — serialized by a lock dir so concurrent reruns never
-    trample the tree. Never raises.
+    The tailscale nudge runs first and gates itself: it must not depend on
+    Go work below, otherwise a cached Go (early return) would silence it
+    forever and the binary would never download. Never raises.
     """
     global _TOOLCHAINS_DONE
+    trigger_tailscale_update()
     try:
         go_want = _resolve_tool_version(version_var("GO_VERSION"), "go")
     except Exception as e:  # noqa: BLE001
@@ -155,7 +156,6 @@ def ensure_toolchains() -> None:
         _TOOLCHAINS_DONE = go_want
     finally:
         _release_toolchain_lock()
-    trigger_tailscale_update()
 
 
 def _acquire_toolchain_lock() -> bool:
