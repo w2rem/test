@@ -58,6 +58,8 @@ GEO_URL = "https://api.ip.sb/geoip"
 GEO_TTL_SEC = 300
 CLUSTER_TTL_SEC = 600
 GO_LOG_PATH = os.environ.get("UF5VMJT_GO_LOG", "/tmp/uf5vmjt-go.log").strip()
+# First ingest per session tails only this much (see ingest_go_events).
+GO_LOG_TAIL_BYTES = 32768
 SHELL_TIMEOUT_SEC = 15
 SHELL_HISTORY_LIMIT = 20
 
@@ -84,6 +86,9 @@ def ingest_go_events() -> int:
     """Tail JSON-lines from the Go sidecar log into the event stream.
 
     Expected line shape: {"level": "info", "msg": "..."}. Returns lines added.
+    First ingest per session starts at the last 32 KB, not at byte zero: the
+    offset is lost on reboot while the file may persist, and replaying hours
+    of stale lines would flood the stream.
     """
     import streamlit as st
 
@@ -93,10 +98,18 @@ def ingest_go_events() -> int:
         offset = int(st.session_state.get("uf5_go_offset", 0) or 0)
     except (TypeError, ValueError):
         offset = 0
+    first = "uf5_go_offset" not in st.session_state
     added = 0
     try:
         with open(GO_LOG_PATH, "rb") as f:
-            f.seek(offset)
+            if first:
+                f.seek(0, os.SEEK_END)
+                end = f.tell()
+                f.seek(max(0, end - GO_LOG_TAIL_BYTES))
+                if end > GO_LOG_TAIL_BYTES:
+                    f.readline()  # drop the partial first line
+            else:
+                f.seek(offset)
             for raw in f:
                 try:
                     obj = json.loads(raw.decode(errors="replace"))
@@ -920,19 +933,40 @@ def ensure_toolchains() -> None:
     trigger_tailscale_update()
 
 
-_TS_UPDATE_SENT = False
+# Old-worker negative cache: a 404 means the sidecar predates /v1/tailscale
+# (redeploy the worker binary). Re-checked every 10 min, not every rerun.
+TS_OLD_WORKER_TTL_SEC = 600
 
 
 def trigger_tailscale_update() -> None:
     """Nudge the sidecar to refresh /tmp/bin/tailscale (fire-and-forget).
 
     The worker answers 202 immediately and downloads detached, so the panel
-    never blocks on the 25 MB fetch. Once per Python process. Never raises.
+    never blocks on the 25 MB fetch. State lives in session_state (survives
+    script re-execution in any process model): done once the version badge
+    resolved a real version, quiet for 10 min against a pre-endpoint worker,
+    retried on transient errors (sidecar still starting). Never raises.
     """
-    global _TS_UPDATE_SENT
-    if _TS_UPDATE_SENT:
+    import streamlit as st
+
+    if st.session_state.get("uf5_ts_triggered"):
         return
-    _TS_UPDATE_SENT = True
+    cached = (st.session_state.get("uf5_versions") or {}).get("Tailscale", "")
+    if cached and cached not in ("unknown", "error", "not installed"):
+        st.session_state["uf5_ts_triggered"] = True
+        return
+    try:
+        if time.time() - float(st.session_state.get("uf5_ts_old_worker_ts", 0) or 0) < TS_OLD_WORKER_TTL_SEC:
+            return
+    except (TypeError, ValueError):
+        pass
+    # The version badge renders on stats only; other sections would never
+    # close the gate above. Ask the sidecar directly (localhost, instant):
+    # installed means done, no update POST at all.
+    stt = worker_ts_status()
+    if isinstance(stt.get("installed"), str) and stt["installed"]:
+        st.session_state["uf5_ts_triggered"] = True
+        return
     try:
         req = urllib.request.Request(
             f"http://127.0.0.1:{WORKER_PORT}/v1/tailscale",
@@ -940,8 +974,13 @@ def trigger_tailscale_update() -> None:
             headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=3) as r:
             if r.status == 202:
+                st.session_state["uf5_ts_triggered"] = True
                 log_event("debug", "tailscale update triggered on sidecar",
                           source="tool")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            st.session_state["uf5_ts_old_worker_ts"] = time.time()
+        log_event("debug", f"tailscale trigger skipped: HTTP {e.code}", source="tool")
     except Exception as e:  # noqa: BLE001
         log_event("debug", f"tailscale trigger skipped: {e}", source="tool")
 
