@@ -8,7 +8,7 @@ import subprocess
 from lib.core.config import BIN_TAILSCALE, COLOR_MUTED, COLOR_OK
 from lib.core.events import log_event
 from lib.core.ui import badge, load_icon
-from lib.services.sidecar import worker_pg_verdict
+from lib.services.sidecar import worker_pg_verdict, worker_vlk_verdict
 from lib.services.tailscale import worker_ts_status
 
 
@@ -20,6 +20,11 @@ def resolve_python_version() -> str:
 def resolve_postgres_version() -> str:
     """Postgres server version via the sidecar pinger. Never raises."""
     return str(worker_pg_verdict().get("version", "") or "unknown")
+
+
+def resolve_valkey_version() -> str:
+    """Valkey server version via the sidecar pinger. Never raises."""
+    return str(worker_vlk_verdict().get("version", "") or "unknown")
 
 
 def resolve_tailscale_version() -> str:
@@ -55,10 +60,10 @@ def resolve_tailscale_version() -> str:
 
 
 def render_versions() -> None:
-    """Python / Postgres / Tailscale rows: icon + name + version."""
+    """Python / Postgres / Valkey / Tailscale rows: icon + name + version."""
     import streamlit as st
 
-    cols = st.columns(3)
+    cols = st.columns(4)
     slots = [c.empty() for c in cols]
     cached_versions = st.session_state.setdefault("uf5_versions", {})
     for s in slots:
@@ -67,6 +72,7 @@ def render_versions() -> None:
     for slot, (label, icon, resolver) in zip(slots, (
         ("Python", "python", resolve_python_version),
         ("Postgres", "postgres", resolve_postgres_version),
+        ("Valkey", "valkey", resolve_valkey_version),
         ("Tailscale", "tailscale", resolve_tailscale_version),
     )):
         version = cached_versions.get(label)
@@ -87,5 +93,8 @@ def render_versions() -> None:
     note = st.session_state.get("uf5_pg_note")
     if note:
         st.caption(f"postgres source: {note}")
+    vlk_note = st.session_state.get("uf5_vlk_note")
+    if vlk_note:
+        st.caption(f"valkey source: {vlk_note}")
 
 

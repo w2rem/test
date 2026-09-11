@@ -188,5 +188,42 @@ def worker_pg_verdict() -> dict:
     return {}
 
 
+def worker_vlk_verdict() -> dict:
+    """Cached /v1/vlk verdict from the local sidecar. Empty when unreachable.
+
+    Mirrors worker_pg_verdict: the failure reason lands in uf5_vlk_note
+    (shown under the versions row), so 'unknown' is always diagnosable.
+    """
+    import streamlit as st
+
+    cached = st.session_state.get("uf5_vlk_verdict")
+    if isinstance(cached, dict) and cached:
+        return cached
+    url = f"http://127.0.0.1:{WORKER_PORT}/v1/vlk"
+    try:
+        data = fetch_json(url, timeout=3)
+    except urllib.error.HTTPError as e:
+        detail = f"sidecar http {e.code}"
+        try:
+            body = json.loads(e.read().decode(errors="replace") or "{}")
+            if isinstance(body, dict) and body.get("error"):
+                detail += f": {body['error']}"
+        except (ValueError, OSError):
+            pass
+        if e.code == 404:
+            detail += " (old worker — redeploy for /v1/vlk)"
+        st.session_state["uf5_vlk_note"] = detail
+        return {}
+    except Exception:  # noqa: BLE001
+        st.session_state["uf5_vlk_note"] = f"sidecar unreachable on :{WORKER_PORT}"
+        return {}
+    if isinstance(data, dict) and data.get("version"):
+        st.session_state["uf5_vlk_verdict"] = data
+        st.session_state.pop("uf5_vlk_note", None)
+        return data
+    st.session_state["uf5_vlk_note"] = "empty verdict"
+    return {}
+
+
 _WORKER_PROC = None
 
