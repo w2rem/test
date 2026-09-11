@@ -1,13 +1,33 @@
-"""uf5vmjt.lib.services.sidecar — Go worker sidecar lifecycle + pg verdict."""
+"""uf5vmjt.lib.services.sidecar — Go worker sidecar lifecycle + pg/vlk verdicts."""
 from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from lib.core.config import GO_LOG_PATH, WORKER_BIN_ENV, WORKER_ENV_KEYS, WORKER_PORT
 from lib.core.events import log_event
 from lib.services.netinfo import fetch_json
+
+
+WORKER_GRACE_SEC = 30
+
+
+def _in_worker_grace() -> bool:
+    """True within WORKER_GRACE_SEC of spawn: verdicts are retried silently.
+
+    The versions row resolves before the sidecar finishes booting (binary
+    start → first tick takes seconds); failure notes during the window are
+    red herrings, so callers skip them while this is true.
+    """
+    import streamlit as st
+
+    started = st.session_state.get("uf5_worker_started_at", 0) or 0
+    try:
+        return (time.time() - float(started)) < WORKER_GRACE_SEC
+    except (TypeError, ValueError):
+        return False
 
 
 
@@ -139,6 +159,7 @@ def ensure_worker() -> None:
                                   args=(proc, GO_LOG_PATH), daemon=True)
         thread.start()
         st.session_state["uf5_worker_started"] = True
+        st.session_state["uf5_worker_started_at"] = time.time()
         log_event("ok", f"worker started: {binary} on :{WORKER_PORT} "
                         f"app={os.environ.get('APP_URL', '?')} "
                         f"every={os.environ.get('UP_EVERY', '?')} min",
@@ -175,10 +196,12 @@ def worker_pg_verdict() -> dict:
             pass
         if e.code == 404:
             detail += " (old worker — redeploy for /v1/pg)"
-        st.session_state["uf5_pg_note"] = detail
+        if not _in_worker_grace():
+            st.session_state["uf5_pg_note"] = detail
         return {}
     except Exception:  # noqa: BLE001
-        st.session_state["uf5_pg_note"] = f"sidecar unreachable on :{WORKER_PORT}"
+        if not _in_worker_grace():
+            st.session_state["uf5_pg_note"] = f"sidecar unreachable on :{WORKER_PORT}"
         return {}
     if isinstance(data, dict) and data.get("version"):
         st.session_state["uf5_pg_verdict"] = data
@@ -212,10 +235,12 @@ def worker_vlk_verdict() -> dict:
             pass
         if e.code == 404:
             detail += " (old worker — redeploy for /v1/vlk)"
-        st.session_state["uf5_vlk_note"] = detail
+        if not _in_worker_grace():
+            st.session_state["uf5_vlk_note"] = detail
         return {}
     except Exception:  # noqa: BLE001
-        st.session_state["uf5_vlk_note"] = f"sidecar unreachable on :{WORKER_PORT}"
+        if not _in_worker_grace():
+            st.session_state["uf5_vlk_note"] = f"sidecar unreachable on :{WORKER_PORT}"
         return {}
     if isinstance(data, dict) and data.get("version"):
         st.session_state["uf5_vlk_verdict"] = data
