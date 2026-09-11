@@ -15,7 +15,7 @@ from lib.sections.shell import render_shell
 from lib.sections.stats import render_stats
 from lib.services.netinfo import app_host, ensure_keepalive_config
 from lib.services.sidecar import ensure_worker, seed_worker_env_from_secrets
-from lib.services.toolchains import ensure_toolchains
+from lib.services.tailscale import trigger_tailscale_update
 
 SECTION_ORDER = ["stats", "shell", "logs"]
 SECTION_LABELS = {"stats": "Stats", "shell": "Shell", "logs": "Logs"}
@@ -43,7 +43,7 @@ def main() -> None:
     st.set_page_config(page_title="uf5vmjt", layout="wide")
     inject_style()
     seed_worker_env_from_secrets()
-    ensure_toolchains()
+    trigger_tailscale_update()
     # Publish our own public URL for the keepalive worker: an explicit APP_URL
     # env wins, otherwise derive https://<host> from the browser URL so a
     # sidecar in the same container (or the operator copying the log line)

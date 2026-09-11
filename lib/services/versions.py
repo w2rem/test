@@ -5,29 +5,16 @@ import platform
 import re
 import shutil
 import subprocess
-from lib.core.config import BIN_GO, BIN_TAILSCALE, COLOR_MUTED, COLOR_OK
+from lib.core.config import BIN_TAILSCALE, COLOR_MUTED, COLOR_OK
 from lib.core.events import log_event
 from lib.core.ui import badge, load_icon
 from lib.services.sidecar import worker_pg_verdict
-from lib.services.toolchains import worker_ts_status
+from lib.services.tailscale import worker_ts_status
 
 
 
 def resolve_python_version() -> str:
     return platform.python_version()
-
-
-def resolve_go_version() -> str:
-    """Go version from /tmp/bin/go first, PATH fallback. Never raises."""
-    go = BIN_GO if os.path.isfile(BIN_GO) else shutil.which("go")
-    if not go:
-        return "not installed"
-    try:
-        out = subprocess.run([go, "version"], capture_output=True, text=True, timeout=10)
-        m = re.search(r"go(\d+\.\d+(?:\.\d+)?)", (out.stdout or "") + (out.stderr or ""))
-        return m.group(1) if m else "unknown"
-    except (OSError, subprocess.SubprocessError):
-        return "error"
 
 
 def resolve_postgres_version() -> str:
@@ -68,10 +55,10 @@ def resolve_tailscale_version() -> str:
 
 
 def render_versions() -> None:
-    """Python / Go / Postgres / Tailscale rows: icon + name + version."""
+    """Python / Postgres / Tailscale rows: icon + name + version."""
     import streamlit as st
 
-    cols = st.columns(4)
+    cols = st.columns(3)
     slots = [c.empty() for c in cols]
     cached_versions = st.session_state.setdefault("uf5_versions", {})
     for s in slots:
@@ -79,7 +66,6 @@ def render_versions() -> None:
                    unsafe_allow_html=True)
     for slot, (label, icon, resolver) in zip(slots, (
         ("Python", "python", resolve_python_version),
-        ("Go", "go", resolve_go_version),
         ("Postgres", "postgres", resolve_postgres_version),
         ("Tailscale", "tailscale", resolve_tailscale_version),
     )):
