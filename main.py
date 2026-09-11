@@ -740,8 +740,41 @@ TS_VERSION_FILE = os.path.join(TS_BIN_DIR, ".version")
 TS_BASE_URL = "https://pkgs.tailscale.com/stable"
 GO_DL_BASE_URL = "https://go.dev/dl"
 RESOLVE_TTL_SEC = 3600
+# Lock dir: at most one run (any session, any process) downloads at a time.
+# Reruns during a slow fetch used to trample each other's trees (rmtree vs
+# extract) — the lock serializes them. Stale locks (crashed holder) expire.
+TOOLCHAIN_LOCK_DIR = "/tmp/uf5vmjt-toolchains.lock"
+TOOLCHAIN_LOCK_STALE_SEC = 20 * 60
 _RESOLVED_CACHE: dict = {}
 _TOOLCHAINS_DONE: tuple | None = None
+
+
+def _acquire_toolchain_lock() -> bool:
+    """Atomic mkdir lock. True when we hold it."""
+    try:
+        os.mkdir(TOOLCHAIN_LOCK_DIR)
+        return True
+    except OSError:
+        pass
+    try:
+        age = time.time() - os.stat(TOOLCHAIN_LOCK_DIR).st_mtime
+    except OSError:
+        return False
+    if age < TOOLCHAIN_LOCK_STALE_SEC:
+        return False
+    try:
+        shutil.rmtree(TOOLCHAIN_LOCK_DIR, ignore_errors=True)
+        os.mkdir(TOOLCHAIN_LOCK_DIR)
+        return True
+    except OSError:
+        return False
+
+
+def _release_toolchain_lock() -> None:
+    try:
+        os.rmdir(TOOLCHAIN_LOCK_DIR)
+    except OSError:
+        pass
 
 
 def version_var(name: str) -> str:
@@ -924,8 +957,8 @@ def ensure_toolchains() -> None:
     """Resolve GO_VERSION/TS_VERSION and fetch missing toolchains.
 
     Fast path (markers match) costs two file reads. Slow path downloads on
-    cold boot only — tracked per process so reruns never refetch. Never
-    raises.
+    cold boot only — once per process fingerprint, serialized by a lock dir
+    so concurrent reruns never trample each other's trees. Never raises.
     """
     global _TOOLCHAINS_DONE
     try:
@@ -936,9 +969,16 @@ def ensure_toolchains() -> None:
         return
     if _TOOLCHAINS_DONE == (go_want, ts_want):
         return
-    ensure_go_toolchain(go_want)
-    ensure_tailscale_binaries(ts_want)
-    _TOOLCHAINS_DONE = (go_want, ts_want)
+    if not _acquire_toolchain_lock():
+        log_event("debug", "toolchain setup running elsewhere — retry next run",
+                  source="tool")
+        return
+    try:
+        ensure_go_toolchain(go_want)
+        ensure_tailscale_binaries(ts_want)
+        _TOOLCHAINS_DONE = (go_want, ts_want)
+    finally:
+        _release_toolchain_lock()
 
 
 # ---------------------------------------------------------------------------
@@ -1493,9 +1533,10 @@ def render_versions() -> None:
         ("Tailscale", "tailscale", resolve_tailscale_version),
     )):
         version = cached_versions.get(label)
-        # Unknown/error is retried on the next visit (sidecar may still be
-        # warming up); final answers stay cached.
-        if not version or version in ("unknown", "error"):
+        # Transient answers are retried on the next visit: the toolchain may
+        # still be downloading and the sidecar may still be warming up.
+        # Final answers stay cached.
+        if not version or version in ("unknown", "error", "not installed"):
             with st.spinner(f"resolving {label.lower()}…"):
                 version = resolver()
             cached_versions[label] = version
