@@ -2,8 +2,11 @@
 
 Paste :// lines (no clash YAML) -> sidecar builds the sing-box batch,
 runs it, polls Clash delays per probe and resolves egress geoip per
-alive probe. Gated by ACCESS_TOKEN like Shell/Logs. Results render in
-uf5-geocard-styled cards with flag watermarks, paginated client-side.
+alive probe. Gated by ACCESS_TOKEN like Shell/Logs.
+
+Everything live (poll + summary + rows + pages) renders INSIDE the
+fragment, so cards update in real time without a full rerun. Results
+render in uf5-geocard-styled rows with flag watermarks, paginated.
 """
 from __future__ import annotations
 import html
@@ -17,6 +20,7 @@ from lib.services.sidecar import worker_check_poll, worker_check_start
 
 PAGE_SIZE = 25
 POLL_EVERY_SEC = 2
+POLL_MISS_LIMIT = 5
 
 
 def _latency_badge(r: dict) -> str:
@@ -47,7 +51,7 @@ def _row_html(r: dict) -> str:
     asn = geo.get("asn") or "?"
     err = html.escape(str(r.get("error") or ""))
     sub = " · ".join(p for p in (ip, place, f"AS{asn} {org}".strip()) if p)
-    if not r.get("alive") and err:
+    if r.get("done") and not r.get("alive") and err:
         sub = (sub + " · " if sub else "") + err
     return (
         f'<div class="uf5-checkrow">{small}'
@@ -97,10 +101,14 @@ def render_check() -> None:
     st.caption("Только :// строки (vless/vmess/trojan/ss/socks/http/hy2/tuic/wireguard), по одной на строку. Без clash YAML — невалидные строки отсеются с причиной.")
     st.text_area("Ссылки", key="uf5_check_input", height=220, label_visibility="collapsed",
                  placeholder="vless://…\ntrojan://…")
-    c1, c2, _ = st.columns([1, 1, 3])
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
     with c1:
         timeout_s = st.selectbox("Таймаут", [5, 10, 20], index=1, key="uf5_check_timeout")
     with c2:
+        parallel = st.selectbox("Пинг-поток", [2, 4, 8, 16], index=2, key="uf5_check_parallel")
+    with c3:
+        geo_parallel = st.selectbox("Geo-поток", [1, 2, 4, 8], index=2, key="uf5_check_geopar")
+    with c4:
         go = st.button("Проверить", key="uf5_check_go", use_container_width=True)
     if go:
         lines = [l for l in str(st.session_state.get("uf5_check_input") or "").splitlines() if l.strip()]
@@ -108,7 +116,8 @@ def render_check() -> None:
             st.warning("Вставь хотя бы одну строку.")
         else:
             with st.spinner(f"sidecar разбирает {len(lines)} строк…"):
-                start = worker_check_start(lines, timeout_ms=int(timeout_s) * 1000)
+                start = worker_check_start(lines, timeout_ms=int(timeout_s) * 1000,
+                                           parallel=int(parallel), geo_parallel=int(geo_parallel))
             if start.get("error"):
                 st.error(start["error"])
                 log_event("warn", f"check start failed: {start['error']}", source="check")
@@ -131,14 +140,14 @@ def render_check() -> None:
         card_end()
         return
 
-    if run.get("state") == "running":
-        try:
-            live = st.fragment(run_every=POLL_EVERY_SEC)
-        except TypeError:
-            live = st.fragment
+    try:
+        live = st.fragment(run_every=POLL_EVERY_SEC)
+    except TypeError:
+        live = st.fragment
 
-        @live
-        def _poll() -> None:
+    @live
+    def _live() -> None:
+        if run.get("state") == "running":
             snap = worker_check_poll(run["run_id"])
             if snap and snap.get("run_id"):
                 st.session_state["uf5_check_miss"] = 0
@@ -154,62 +163,61 @@ def render_check() -> None:
                 # gone — stop polling instead of hanging on "running".
                 miss = int(st.session_state.get("uf5_check_miss") or 0) + 1
                 st.session_state["uf5_check_miss"] = miss
-                if miss >= 5:
+                if miss >= POLL_MISS_LIMIT:
                     run["state"] = "error"
                     run["detail"] = "sidecar restarted, run lost — start again"
-            done = sum(1 for r in run.get("results") or [] if r.get("done"))
-            total = int(run.get("total") or 0)
-            st.progress(min(1.0, done / total) if total else 0.0,
-                        text=f"{run.get('state', '?')} — {done}/{total}")
-            if run.get("state") == "error" and run.get("detail"):
-                st.error(str(run["detail"]))
+        done = sum(1 for r in run.get("results") or [] if r.get("done"))
+        total = int(run.get("total") or 0)
+        st.progress(min(1.0, done / total) if total else 0.0,
+                    text=f"{run.get('state', '?')} — {done}/{total}")
+        if run.get("state") == "error" and run.get("detail"):
+            st.error(str(run["detail"]))
 
-        _poll()
+        st.markdown(_summary_card(run), unsafe_allow_html=True)
 
-    st.markdown(_summary_card(run), unsafe_allow_html=True)
+        rejected = run.get("rejected") or []
+        if rejected:
+            with st.expander(f"Отсеяно: {len(rejected)}"):
+                for r in rejected[:100]:
+                    st.caption(f"строка {r.get('index', '?')}: {r.get('reason', '?')}")
 
-    rejected = run.get("rejected") or []
-    if rejected:
-        with st.expander(f"Отсеяно: {len(rejected)}"):
-            for r in rejected[:100]:
-                st.caption(f"строка {r.get('index', '?')}: {r.get('reason', '?')}")
+        results = list(run.get("results") or [])
+        f1, f2 = st.columns(2)
+        with f1:
+            flt = st.selectbox("Показать", ["all", "alive", "dead"], key="uf5_check_filter",
+                               format_func={"all": "Все", "alive": "Живые", "dead": "Мёртвые"}.get)
+        with f2:
+            srt = st.selectbox("Порядок", ["latency", "input"], key="uf5_check_sort",
+                               format_func={"latency": "Сначала быстрые", "input": "Как вставлено"}.get)
+        if flt == "alive":
+            results = [r for r in results if r.get("alive")]
+        elif flt == "dead":
+            results = [r for r in results if r.get("done") and not r.get("alive")]
+        if srt == "latency":
+            # Alive by latency, then pending, then measured dead.
+            results.sort(key=lambda r: (0, int(r.get("latency_ms") or 0)) if r.get("alive")
+                         else ((1, 0) if not r.get("done") else (2, 0)))
+        else:
+            results.sort(key=lambda r: int(r.get("index") or 0))
 
-    results = list(run.get("results") or [])
-    f1, f2, _ = st.columns([1, 1, 2])
-    with f1:
-        flt = st.selectbox("Показать", ["all", "alive", "dead"], key="uf5_check_filter",
-                           format_func={"all": "Все", "alive": "Живые", "dead": "Мёртвые"}.get)
-    with f2:
-        srt = st.selectbox("Порядок", ["latency", "input"], key="uf5_check_sort",
-                           format_func={"latency": "Сначала быстрые", "input": "Как вставлено"}.get)
-    if flt == "alive":
-        results = [r for r in results if r.get("alive")]
-    elif flt == "dead":
-        results = [r for r in results if r.get("done") and not r.get("alive")]
-    if srt == "latency":
-        # Alive by latency, then pending, then measured dead.
-        results.sort(key=lambda r: (0, int(r.get("latency_ms") or 0)) if r.get("alive")
-                     else ((1, 0) if not r.get("done") else (2, 0)))
-    else:
-        results.sort(key=lambda r: int(r.get("index") or 0))
+        total_pages = max(1, (len(results) + PAGE_SIZE - 1) // PAGE_SIZE)
+        page = min(int(st.session_state.get("uf5_check_page") or 0), total_pages - 1)
+        chunk = results[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
+        if not chunk:
+            st.caption("Пока пусто — опрос идёт, страница обновится сама.")
+        for r in chunk:
+            st.markdown(_row_html(r), unsafe_allow_html=True)
+        p1, p2, p3 = st.columns([1, 1, 4])
+        with p1:
+            if st.button("← Назад", key="uf5_check_prev", disabled=page == 0,
+                         use_container_width=True):
+                st.session_state["uf5_check_page"] = page - 1
+        with p2:
+            if st.button("Вперёд →", key="uf5_check_next",
+                         disabled=page >= total_pages - 1, use_container_width=True):
+                st.session_state["uf5_check_page"] = page + 1
+        with p3:
+            st.caption(f"стр. {page + 1}/{total_pages} · всего {len(results)}")
 
-    total_pages = max(1, (len(results) + PAGE_SIZE - 1) // PAGE_SIZE)
-    page = min(int(st.session_state.get("uf5_check_page") or 0), total_pages - 1)
-    chunk = results[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
-    if not chunk:
-        st.caption("Пока пусто — опрос идёт, страница обновится сама.")
-    for r in chunk:
-        st.markdown(_row_html(r), unsafe_allow_html=True)
-    p1, p2, p3 = st.columns([1, 1, 4])
-    with p1:
-        if st.button("← Назад", key="uf5_check_prev", disabled=page == 0, use_container_width=True):
-            st.session_state["uf5_check_page"] = page - 1
-            st.rerun()
-    with p2:
-        if st.button("Вперёд →", key="uf5_check_next",
-                     disabled=page >= total_pages - 1, use_container_width=True):
-            st.session_state["uf5_check_page"] = page + 1
-            st.rerun()
-    with p3:
-        st.caption(f"стр. {page + 1}/{total_pages} · всего {len(results)}")
+    _live()
     card_end()

@@ -304,11 +304,14 @@ def _worker_post(path: str, payload: dict, timeout: float = 30) -> dict:
     return data
 
 
-def worker_check_start(lines: list, timeout_ms: int = 10000) -> dict:
+def worker_check_start(lines: list, timeout_ms: int = 10000,
+                        parallel: int = 8, geo_parallel: int = 4) -> dict:
     """Start a proxy check run: POST /v1/check. Returns the 202 payload
     ({run_id, accepted, rejected}) or {"error": ...}. Never raises."""
     try:
-        data = _worker_post("/v1/check", {"lines": lines, "timeout_ms": timeout_ms}, timeout=30)
+        data = _worker_post("/v1/check", {"lines": lines, "timeout_ms": timeout_ms,
+                                          "parallel": parallel, "geo_parallel": geo_parallel},
+                            timeout=30)
     except urllib.error.HTTPError as e:
         try:
             body = json.loads(e.read().decode(errors="replace") or "{}")
