@@ -333,7 +333,7 @@ def worker_check_poll(run_id: str) -> dict:
 
     url = f"http://127.0.0.1:{WORKER_PORT}/v1/check?id={run_id}"
     try:
-        data = fetch_json(url, timeout=8)
+        data = fetch_json(url, timeout=5)
     except Exception:  # noqa: BLE001
         return {}
     if not isinstance(data, dict) or not data.get("run_id"):
