@@ -130,7 +130,7 @@ def render_check() -> None:
     st.caption("Только :// строки (vless/vmess/trojan/ss/socks/http/hy2/tuic/wireguard), по одной на строку. Без clash YAML — невалидные строки отсеются с причиной.")
     st.text_area("Ссылки", key="uf5_check_input", height=220, label_visibility="collapsed",
                  placeholder="vless://…\ntrojan://…")
-    c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
+    c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 2])
     with c1:
         timeout_s = st.selectbox("Таймаут", [5, 10, 20], index=1, key="uf5_check_timeout")
     with c2:
@@ -138,6 +138,12 @@ def render_check() -> None:
     with c3:
         geo_parallel = st.selectbox("Geo-поток", [1, 2, 4, 8], index=2, key="uf5_check_geopar")
     with c4:
+        dns = st.selectbox("DNS", ["auto", "google", "cloudflare", "yandex", "ali"],
+                           index=0, key="uf5_check_dns",
+                           format_func={"auto": "Авто", "google": "Google",
+                                        "cloudflare": "Cloudflare", "yandex": "Yandex",
+                                        "ali": "Alibaba"}.get)
+    with c5:
         go = st.button("Проверить", key="uf5_check_go", use_container_width=True)
     if go:
         lines = [l for l in str(st.session_state.get("uf5_check_input") or "").splitlines() if l.strip()]
@@ -146,7 +152,8 @@ def render_check() -> None:
         else:
             with st.spinner(f"sidecar разбирает {len(lines)} строк…"):
                 start = worker_check_start(lines, timeout_ms=int(timeout_s) * 1000,
-                                           parallel=int(parallel), geo_parallel=int(geo_parallel))
+                                           parallel=int(parallel), geo_parallel=int(geo_parallel),
+                                           dns=str(dns))
             if start.get("error"):
                 st.error(start["error"])
                 log_event("warn", f"check start failed: {start['error']}", source="check")

@@ -305,12 +305,14 @@ def _worker_post(path: str, payload: dict, timeout: float = 30) -> dict:
 
 
 def worker_check_start(lines: list, timeout_ms: int = 10000,
-                        parallel: int = 8, geo_parallel: int = 4) -> dict:
+                        parallel: int = 8, geo_parallel: int = 4,
+                        dns: str = "auto") -> dict:
     """Start a proxy check run: POST /v1/check. Returns the 202 payload
     ({run_id, accepted, rejected}) or {"error": ...}. Never raises."""
     try:
         data = _worker_post("/v1/check", {"lines": lines, "timeout_ms": timeout_ms,
-                                          "parallel": parallel, "geo_parallel": geo_parallel},
+                                          "parallel": parallel, "geo_parallel": geo_parallel,
+                                          "dns": dns or "auto"},
                             timeout=30)
     except urllib.error.HTTPError as e:
         try:
