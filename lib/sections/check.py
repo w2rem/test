@@ -17,14 +17,15 @@ from lib.services.sidecar import worker_check_poll, worker_check_start
 
 PAGE_SIZE = 25
 POLL_EVERY_SEC = 2
-POLL_BUDGET_SEC = 1200
 
 
-def _latency_badge(alive: bool, ms) -> str:
-    if not alive:
+def _latency_badge(r: dict) -> str:
+    if not r.get("done"):
+        return badge("…", COLOR_MUTED)
+    if not r.get("alive"):
         return badge("dead", COLOR_MUTED)
     try:
-        ms = int(ms or 0)
+        ms = int(r.get("latency_ms") or 0)
     except (TypeError, ValueError):
         return badge("?", COLOR_MUTED)
     if ms < 300:
@@ -52,12 +53,13 @@ def _row_html(r: dict) -> str:
         f'<div class="uf5-checkrow">{small}'
         f'<span class="uf5-checkrow-main"><b>{name}</b>'
         f'<span class="uf5-muted">{sub}</span></span>'
-        f'{_latency_badge(r.get("alive"), r.get("latency_ms"))}</div>'
+        f'{_latency_badge(r)}</div>'
     )
 
 
 def _summary_card(run: dict) -> str:
     results = run.get("results") or []
+    done_n = sum(1 for r in results if r.get("done"))
     alive = [r for r in results if r.get("alive")]
     lat = sorted(int(r.get("latency_ms") or 0) for r in alive if r.get("latency_ms"))
     med = lat[len(lat) // 2] if lat else 0
@@ -67,8 +69,8 @@ def _summary_card(run: dict) -> str:
     big = f'<img class="uf5-geocard-bg" src="{flag}" alt=""/>' if flag else ""
     state = run.get("state", "?")
     state_badge = badge(state, COLOR_OK if state == "done" else COLOR_WARN)
-    dead = len(results) - len(alive)
-    pending = max(0, int(run.get("total") or 0) - len(results))
+    dead = done_n - len(alive)
+    pending = max(0, int(run.get("total") or 0) - done_n)
     line2 = f"{len(alive)} alive · {dead} dead"
     if pending:
         line2 += f" · {pending} running"
@@ -119,6 +121,7 @@ def render_check() -> None:
                 }
                 st.session_state["uf5_check_page"] = 0
                 st.session_state["uf5_check_filter"] = "all"
+                st.session_state["uf5_check_miss"] = 0
                 log_event("ok", f"check started: {start['run_id']} "
                                 f"({len(start.get('accepted') or [])} probes, "
                                 f"{len(start.get('rejected') or [])} rejected)", source="check")
@@ -138,14 +141,23 @@ def render_check() -> None:
         def _poll() -> None:
             snap = worker_check_poll(run["run_id"])
             if snap and snap.get("run_id"):
+                st.session_state["uf5_check_miss"] = 0
                 run.update({k: snap.get(k, run.get(k)) for k in
-                            ("state", "total", "results", "rejected")})
+                            ("state", "total", "results", "rejected", "detail")})
                 run["done"] = snap.get("done", run.get("done", 0))
                 if run.get("state") in ("done", "error"):
                     log_event("ok" if run["state"] == "done" else "warn",
                               f"check {run['run_id']}: {run['state']} "
                               f"({len(run.get('results') or [])} results)", source="check")
-            done = len(run.get("results") or [])
+            else:
+                # Sidecar restarted (registry is in-memory): the run is
+                # gone — stop polling instead of hanging on "running".
+                miss = int(st.session_state.get("uf5_check_miss") or 0) + 1
+                st.session_state["uf5_check_miss"] = miss
+                if miss >= 5:
+                    run["state"] = "error"
+                    run["detail"] = "sidecar restarted, run lost — start again"
+            done = sum(1 for r in run.get("results") or [] if r.get("done"))
             total = int(run.get("total") or 0)
             st.progress(min(1.0, done / total) if total else 0.0,
                         text=f"{run.get('state', '?')} — {done}/{total}")
@@ -173,9 +185,11 @@ def render_check() -> None:
     if flt == "alive":
         results = [r for r in results if r.get("alive")]
     elif flt == "dead":
-        results = [r for r in results if not r.get("alive")]
+        results = [r for r in results if r.get("done") and not r.get("alive")]
     if srt == "latency":
-        results.sort(key=lambda r: (not r.get("alive"), int(r.get("latency_ms") or 10 ** 9)))
+        # Alive by latency, then pending, then measured dead.
+        results.sort(key=lambda r: (0, int(r.get("latency_ms") or 0)) if r.get("alive")
+                     else ((1, 0) if not r.get("done") else (2, 0)))
     else:
         results.sort(key=lambda r: int(r.get("index") or 0))
 
