@@ -135,20 +135,28 @@ def render_check() -> None:
     st.caption("Только :// строки (vless/vmess/trojan/ss/socks/http/hy2/tuic/wireguard), по одной на строку. Без clash YAML — невалидные строки отсеются с причиной.")
     st.text_area("Ссылки", key="uf5_check_input", height=220, label_visibility="collapsed",
                  placeholder="vless://…\ntrojan://…")
-    c1, c2, c3, c4, c5 = st.columns([1, 1, 1, 1, 2])
+    # Sliders need width: two full-width rows. Fresh keys (the old
+    # selectbox keys held seconds, out of slider range — stale state
+    # would crash the widget).
+    r1a, r1b = st.columns(2)
+    with r1a:
+        timeout_ms = st.slider("Таймаут замера", min_value=100, max_value=10000,
+                               value=10000, step=20, format="%d мс",
+                               key="uf5_check_timeout_ms")
+    with r1b:
+        parallel = st.select_slider("Одновременный батч", [10, 25, 50, 75, 100],
+                                    value=25, key="uf5_check_batch",
+                                    format_func=lambda v: f"{v} потоков")
+    c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
-        timeout_s = st.selectbox("Таймаут", [5, 10, 20], index=1, key="uf5_check_timeout")
-    with c2:
-        parallel = st.selectbox("Пинг-поток", [2, 4, 8, 16], index=2, key="uf5_check_parallel")
-    with c3:
         geo_parallel = st.selectbox("Geo-поток", [1, 2, 4, 8], index=2, key="uf5_check_geopar")
-    with c4:
+    with c2:
         dns = st.selectbox("DNS", ["auto", "google", "cloudflare", "yandex", "ali"],
                            index=0, key="uf5_check_dns",
                            format_func={"auto": "Авто", "google": "Google",
                                         "cloudflare": "Cloudflare", "yandex": "Yandex",
                                         "ali": "Alibaba"}.get)
-    with c5:
+    with c3:
         go = st.button("Проверить", key="uf5_check_go", use_container_width=True)
     if go:
         lines = [l for l in str(st.session_state.get("uf5_check_input") or "").splitlines() if l.strip()]
@@ -156,7 +164,7 @@ def render_check() -> None:
             st.warning("Вставь хотя бы одну строку.")
         else:
             with st.spinner(f"sidecar разбирает {len(lines)} строк…"):
-                start = worker_check_start(lines, timeout_ms=int(timeout_s) * 1000,
+                start = worker_check_start(lines, timeout_ms=int(timeout_ms),
                                            parallel=int(parallel), geo_parallel=int(geo_parallel),
                                            dns=str(dns))
             if start.get("error"):
