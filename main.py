@@ -10,6 +10,7 @@ import os
 from lib.core.auth import render_lock_button
 from lib.core.events import log_event
 from lib.core.ui import inject_style
+from lib.sections.check import render_check
 from lib.sections.logs import render_logs
 from lib.sections.shell import render_shell
 from lib.sections.stats import render_stats
@@ -17,8 +18,8 @@ from lib.services.netinfo import app_host, ensure_keepalive_config
 from lib.services.sidecar import ensure_worker, seed_worker_env_from_secrets
 from lib.services.tailscale import trigger_tailscale_update
 
-SECTION_ORDER = ["stats", "shell", "logs"]
-SECTION_LABELS = {"stats": "Stats", "shell": "Shell", "logs": "Logs"}
+SECTION_ORDER = ["stats", "shell", "logs", "check"]
+SECTION_LABELS = {"stats": "Stats", "shell": "Shell", "logs": "Logs", "check": "Check"}
 
 
 def section_animation(section: str) -> str:
@@ -76,6 +77,8 @@ def main() -> None:
         render_stats()
     elif section == "shell":
         render_shell()
+    elif section == "check":
+        render_check()
     else:
         render_logs()
 

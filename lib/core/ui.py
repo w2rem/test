@@ -223,6 +223,16 @@ def inject_style() -> None:
         .uf5-geo-ip {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
         .uf5-flag {{ width: 30px; height: 22px; object-fit: cover; border-radius: 5px;
                      box-shadow: 0 1px 4px rgba(0,0,0,.25); }}
+        /* Check rows: flag + name/sub + latency badge, geocard-adjacent. */
+        .uf5-checkrow {{ display: flex; align-items: center; gap: 12px;
+                         background: {COLOR_PANEL}; border: 1px solid {COLOR_BORDER};
+                         border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; }}
+        .uf5-checkrow-main {{ flex: 1; min-width: 0; display: flex; flex-direction: column; }}
+        .uf5-checkrow-main b {{ font-size: 14px; white-space: nowrap; overflow: hidden;
+                                text-overflow: ellipsis; }}
+        .uf5-checkrow-main .uf5-muted {{ font-size: 12px; white-space: nowrap; overflow: hidden;
+                                         text-overflow: ellipsis; }}
+        .uf5-checkrow .uf5-badge {{ flex: none; white-space: nowrap; }}
         </style>""",
         unsafe_allow_html=True,
     )

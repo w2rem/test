@@ -290,5 +290,53 @@ def worker_singbox_status() -> dict:
     return {}
 
 
+def _worker_post(path: str, payload: dict, timeout: float = 30) -> dict:
+    """POST JSON to the local sidecar. Raises on transport/HTTP errors."""
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{WORKER_PORT}{path}", data=body,
+        headers={"Content-Type": "application/json", "User-Agent": "uf5vmjt/1.0"},
+        method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        data = json.loads(r.read().decode(errors="replace") or "{}")
+    if not isinstance(data, dict):
+        raise ValueError("bad sidecar response")
+    return data
+
+
+def worker_check_start(lines: list, timeout_ms: int = 10000) -> dict:
+    """Start a proxy check run: POST /v1/check. Returns the 202 payload
+    ({run_id, accepted, rejected}) or {"error": ...}. Never raises."""
+    try:
+        data = _worker_post("/v1/check", {"lines": lines, "timeout_ms": timeout_ms}, timeout=30)
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.loads(e.read().decode(errors="replace") or "{}")
+            detail = body.get("error", "") if isinstance(body, dict) else ""
+        except (ValueError, OSError):
+            detail = ""
+        return {"error": f"sidecar http {e.code}" + (f": {detail}" if detail else "")}
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"sidecar unreachable on :{WORKER_PORT} ({e})"}
+    if not data.get("run_id"):
+        return {"error": data.get("error") or "empty start verdict"}
+    return data
+
+
+def worker_check_poll(run_id: str) -> dict:
+    """Poll a run: GET /v1/check?id=. Returns {} when unreachable (the
+    caller keeps the last good snapshot). Never raises."""
+    import streamlit as st
+
+    url = f"http://127.0.0.1:{WORKER_PORT}/v1/check?id={run_id}"
+    try:
+        data = fetch_json(url, timeout=8)
+    except Exception:  # noqa: BLE001
+        return {}
+    if not isinstance(data, dict) or not data.get("run_id"):
+        return {}
+    return data
+
+
 _WORKER_PROC = None
 
