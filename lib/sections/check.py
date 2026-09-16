@@ -106,6 +106,21 @@ def _summary_card(run: dict) -> str:
     )
 
 
+def _filtered_sorted(run: dict, flt: str, srt: str) -> list:
+    results = list(run.get("results") or [])
+    if flt == "alive":
+        results = [r for r in results if r.get("alive")]
+    elif flt == "dead":
+        results = [r for r in results if r.get("done") and not r.get("alive")]
+    if srt == "latency":
+        # Alive by latency, then pending, then measured dead.
+        results.sort(key=lambda r: (0, int(r.get("latency_ms") or 0)) if r.get("alive")
+                     else ((1, 0) if not r.get("done") else (2, 0)))
+    else:
+        results.sort(key=lambda r: int(r.get("index") or 0))
+    return results
+
+
 def render_check() -> None:
     import streamlit as st
 
@@ -154,6 +169,23 @@ def render_check() -> None:
         card_end()
         return
 
+    # All interactive widgets live OUTSIDE the timed fragment: widgets
+    # remounted every tick steal focus and drop clicks (the "freeze").
+    # The fragment below is read-only: poll + progress + summary + rows.
+    rejected = run.get("rejected") or []
+    if rejected:
+        with st.expander(f"Отсеяно: {len(rejected)}"):
+            for r in rejected[:100]:
+                st.caption(f"строка {r.get('index', '?')}: {r.get('reason', '?')}")
+
+    f1, f2 = st.columns(2)
+    with f1:
+        st.selectbox("Показать", ["all", "alive", "dead"], key="uf5_check_filter",
+                     format_func={"all": "Все", "alive": "Живые", "dead": "Мёртвые"}.get)
+    with f2:
+        st.selectbox("Порядок", ["latency", "input"], key="uf5_check_sort",
+                     format_func={"latency": "Сначала быстрые", "input": "Как вставлено"}.get)
+
     try:
         live = st.fragment(run_every=POLL_EVERY_SEC)
     except TypeError:
@@ -189,49 +221,34 @@ def render_check() -> None:
 
         st.markdown(_summary_card(run), unsafe_allow_html=True)
 
-        rejected = run.get("rejected") or []
-        if rejected:
-            with st.expander(f"Отсеяно: {len(rejected)}"):
-                for r in rejected[:100]:
-                    st.caption(f"строка {r.get('index', '?')}: {r.get('reason', '?')}")
-
-        results = list(run.get("results") or [])
-        f1, f2 = st.columns(2)
-        with f1:
-            flt = st.selectbox("Показать", ["all", "alive", "dead"], key="uf5_check_filter",
-                               format_func={"all": "Все", "alive": "Живые", "dead": "Мёртвые"}.get)
-        with f2:
-            srt = st.selectbox("Порядок", ["latency", "input"], key="uf5_check_sort",
-                               format_func={"latency": "Сначала быстрые", "input": "Как вставлено"}.get)
-        if flt == "alive":
-            results = [r for r in results if r.get("alive")]
-        elif flt == "dead":
-            results = [r for r in results if r.get("done") and not r.get("alive")]
-        if srt == "latency":
-            # Alive by latency, then pending, then measured dead.
-            results.sort(key=lambda r: (0, int(r.get("latency_ms") or 0)) if r.get("alive")
-                         else ((1, 0) if not r.get("done") else (2, 0)))
-        else:
-            results.sort(key=lambda r: int(r.get("index") or 0))
-
+        flt = st.session_state.get("uf5_check_filter", "all")
+        srt = st.session_state.get("uf5_check_sort", "latency")
+        results = _filtered_sorted(run, flt, srt)
         total_pages = max(1, (len(results) + PAGE_SIZE - 1) // PAGE_SIZE)
-        page = min(int(st.session_state.get("uf5_check_page") or 0), total_pages - 1)
+        page = min(max(0, int(st.session_state.get("uf5_check_page") or 0)), total_pages - 1)
         chunk = results[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
         if not chunk:
             st.caption("Пока пусто — опрос идёт, страница обновится сама.")
         for r in chunk:
             st.markdown(_row_html(r), unsafe_allow_html=True)
-        p1, p2, p3 = st.columns([1, 1, 4])
-        with p1:
-            if st.button("← Назад", key="uf5_check_prev", disabled=page == 0,
-                         use_container_width=True):
-                st.session_state["uf5_check_page"] = page - 1
-        with p2:
-            if st.button("Вперёд →", key="uf5_check_next",
-                         disabled=page >= total_pages - 1, use_container_width=True):
-                st.session_state["uf5_check_page"] = page + 1
-        with p3:
-            st.caption(f"стр. {page + 1}/{total_pages} · всего {len(results)}")
 
     _live()
+
+    # Pagination outside the fragment (same session keys the tick reads).
+    flt = st.session_state.get("uf5_check_filter", "all")
+    srt = st.session_state.get("uf5_check_sort", "latency")
+    results = _filtered_sorted(run, flt, srt)
+    total_pages = max(1, (len(results) + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = min(max(0, int(st.session_state.get("uf5_check_page") or 0)), total_pages - 1)
+    p1, p2, p3 = st.columns([1, 1, 4])
+    with p1:
+        if st.button("← Назад", key="uf5_check_prev", disabled=page == 0,
+                     use_container_width=True):
+            st.session_state["uf5_check_page"] = page - 1
+    with p2:
+        if st.button("Вперёд →", key="uf5_check_next",
+                     disabled=page >= total_pages - 1, use_container_width=True):
+            st.session_state["uf5_check_page"] = page + 1
+    with p3:
+        st.caption(f"стр. {page + 1}/{total_pages} · всего {len(results)}")
     card_end()
