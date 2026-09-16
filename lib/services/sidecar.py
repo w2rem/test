@@ -250,5 +250,45 @@ def worker_vlk_verdict() -> dict:
     return {}
 
 
+def worker_singbox_status() -> dict:
+    """Cached /v1/singbox status from the local sidecar. Empty when unreachable.
+
+    Mirrors worker_vlk_verdict: the failure reason lands in uf5_singbox_note
+    (shown under the versions row), so 'unknown' is always diagnosable.
+    Success is an `installed` version ("" while still downloading).
+    """
+    import streamlit as st
+
+    cached = st.session_state.get("uf5_singbox_status")
+    if isinstance(cached, dict) and cached:
+        return cached
+    url = f"http://127.0.0.1:{WORKER_PORT}/v1/singbox"
+    try:
+        data = fetch_json(url, timeout=3)
+    except urllib.error.HTTPError as e:
+        detail = f"sidecar http {e.code}"
+        try:
+            body = json.loads(e.read().decode(errors="replace") or "{}")
+            if isinstance(body, dict) and body.get("error"):
+                detail += f": {body['error']}"
+        except (ValueError, OSError):
+            pass
+        if e.code == 404:
+            detail += " (old worker — redeploy for /v1/singbox)"
+        if not _in_worker_grace():
+            st.session_state["uf5_singbox_note"] = detail
+        return {}
+    except Exception:  # noqa: BLE001
+        if not _in_worker_grace():
+            st.session_state["uf5_singbox_note"] = f"sidecar unreachable on :{WORKER_PORT}"
+        return {}
+    if isinstance(data, dict) and "installed" in data:
+        st.session_state["uf5_singbox_status"] = data
+        st.session_state.pop("uf5_singbox_note", None)
+        return data
+    st.session_state["uf5_singbox_note"] = "empty status"
+    return {}
+
+
 _WORKER_PROC = None
 
