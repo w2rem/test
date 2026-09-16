@@ -24,11 +24,14 @@ def inject_style() -> None:
                       font-size: 13px; font-weight: 600; color: #fff; }}
         .uf5-ver {{ display: flex; align-items: center; gap: 12px; }}
         .uf5-ver b {{ font-size: 15px; }}
-        .uf5-ver .uf5-ver-name {{ flex: 1; font-size: 15px; font-weight: 600; }}
+        .uf5-ver svg {{ flex: none; }}
+        .uf5-ver .uf5-ver-name {{ flex: 1; min-width: 0; font-size: 15px; font-weight: 600;
+                                  white-space: nowrap; overflow: hidden;
+                                  text-overflow: ellipsis; }}
+        .uf5-ver .uf5-badge {{ flex: none; }}
         /* Compact versions row (5+ badges): tighter type, no wrap. */
-        .uf5-ver-compact {{ gap: 8px; }}
-        .uf5-ver-compact .uf5-ver-name {{ font-size: 13px; white-space: nowrap;
-                                          overflow: hidden; text-overflow: ellipsis; }}
+        .uf5-ver-compact {{ gap: 10px; }}
+        .uf5-ver-compact .uf5-ver-name {{ font-size: 13px; }}
         .uf5-ver-compact .uf5-badge {{ font-size: 11px; padding: 2px 10px;
                                        white-space: nowrap; }}
         /* Sidebar: soft studio panel, both testids covered. */
