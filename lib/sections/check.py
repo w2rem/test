@@ -15,12 +15,15 @@ from lib.core.config import COLOR_ERR, COLOR_MUTED, COLOR_OK, COLOR_WARN
 from lib.core.events import log_event
 from lib.core.ui import badge, card, card_end
 from lib.services.netinfo import flag_url
-from lib.services.sidecar import worker_check_poll, worker_check_start
+from lib.services.sidecar import worker_boot, worker_check_poll, worker_check_start
 
 
 PAGE_SIZE = 25
 POLL_EVERY_SEC = 4
-POLL_MISS_LIMIT = 5
+# Transport misses (timeout/down) vs gone misses (worker forgot the run)
+# are different failures with different verdicts — never one counter.
+MISS_TRANSPORT_LIMIT = 8
+MISS_GONE_LIMIT = 3
 
 
 def _latency_badge(r: dict) -> str:
@@ -158,17 +161,19 @@ def render_check() -> None:
                 st.error(start["error"])
                 log_event("warn", f"check start failed: {start['error']}", source="check")
             else:
+                accepted = start.get("accepted") or []
                 st.session_state["uf5_check_run"] = {
                     "run_id": start["run_id"], "state": "running",
-                    "total": len(start.get("accepted") or []),
+                    "total": len(accepted),
                     "results": [], "rejected": start.get("rejected") or [],
-                    "accepted": start.get("accepted") or [],
                 }
                 st.session_state["uf5_check_page"] = 0
                 st.session_state["uf5_check_filter"] = "all"
                 st.session_state["uf5_check_miss"] = 0
+                st.session_state["uf5_check_gone"] = 0
+                st.session_state["uf5_check_boot"] = worker_boot()
                 log_event("ok", f"check started: {start['run_id']} "
-                                f"({len(start.get('accepted') or [])} probes, "
+                                f"({len(accepted)} probes, "
                                 f"{len(start.get('rejected') or [])} rejected)", source="check")
                 st.rerun()
     run = st.session_state.get("uf5_check_run")
@@ -204,6 +209,7 @@ def render_check() -> None:
             snap = worker_check_poll(run["run_id"])
             if snap and snap.get("run_id"):
                 st.session_state["uf5_check_miss"] = 0
+                st.session_state["uf5_check_gone"] = 0
                 run.update({k: snap.get(k, run.get(k)) for k in
                             ("state", "total", "results", "rejected", "detail")})
                 run["done"] = snap.get("done", run.get("done", 0))
@@ -211,14 +217,31 @@ def render_check() -> None:
                     log_event("ok" if run["state"] == "done" else "warn",
                               f"check {run['run_id']}: {run['state']} "
                               f"({len(run.get('results') or [])} results)", source="check")
+            elif snap.get("gone"):
+                # Worker answered but forgot the run: restarted, expired,
+                # or finished-before-restart without snapshot. Confirm via
+                # boot id before condemning — a slow worker never lands here.
+                gone = int(st.session_state.get("uf5_check_gone") or 0) + 1
+                st.session_state["uf5_check_gone"] = gone
+                if gone >= MISS_GONE_LIMIT:
+                    boot_now = worker_boot()
+                    boot_then = int(st.session_state.get("uf5_check_boot") or 0)
+                    run["state"] = "error"
+                    if boot_now and boot_then and boot_now != boot_then:
+                        run["detail"] = "sidecar restarted, run lost — start again"
+                    elif boot_now:
+                        run["detail"] = "worker forgot the run (restart/expiry) — start again"
+                    else:
+                        run["detail"] = "sidecar down — wait for respawn, then start again"
             else:
-                # Sidecar restarted (registry is in-memory): the run is
-                # gone — stop polling instead of hanging on "running".
+                # Transport trouble (timeout/down): the run may still be
+                # alive server-side — keep polling, condemn only after a
+                # long silence, and never call it a restart.
                 miss = int(st.session_state.get("uf5_check_miss") or 0) + 1
                 st.session_state["uf5_check_miss"] = miss
-                if miss >= POLL_MISS_LIMIT:
+                if miss >= MISS_TRANSPORT_LIMIT:
                     run["state"] = "error"
-                    run["detail"] = "sidecar restarted, run lost — start again"
+                    run["detail"] = "sidecar unreachable, polling gave up — start again"
         done = sum(1 for r in run.get("results") or [] if r.get("done"))
         total = int(run.get("total") or 0)
         st.progress(min(1.0, done / total) if total else 0.0,

@@ -90,12 +90,37 @@ def worker_alive() -> bool:
         return False
 
 
+GO_LOG_MAX_BYTES = 5 * 1024 * 1024
+GO_LOG_KEEP_BYTES = 1 * 1024 * 1024
+
+
+def _rotate_go_log(path: str) -> None:
+    """Keep the Go log bounded: over GO_LOG_MAX_BYTES, retain the last
+    GO_LOG_KEEP_BYTES. The pump thread calls this once at startup."""
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return
+    if size <= GO_LOG_MAX_BYTES:
+        return
+    try:
+        with open(path, "rb") as f:
+            f.seek(max(0, size - GO_LOG_KEEP_BYTES))
+            tail = f.read().split(b"\n", 1)
+            keep = tail[-1] if len(tail) > 1 else tail[0]
+        with open(path, "wb") as f:
+            f.write(keep)
+    except OSError:
+        pass
+
+
 def _pump_worker_logs(proc, path: str) -> None:
     """Forward child stdout lines to the Go JSON-lines log (daemon thread).
 
     Never touches session_state (wrong context here) — ingest_go_events()
     tails the file back into the event stream on the script thread.
     """
+    _rotate_go_log(path)
     try:
         assert proc.stdout is not None
         with open(path, "a", encoding="utf-8", errors="replace") as f:
@@ -304,6 +329,21 @@ def _worker_post(path: str, payload: dict, timeout: float = 30) -> dict:
     return data
 
 
+def worker_boot() -> int:
+    """Worker process boot_unix from /version (0 when unreachable).
+    Lets the panel tell a restarted worker from a slow one. Never raises."""
+    try:
+        data = fetch_json(f"http://127.0.0.1:{WORKER_PORT}/version", timeout=2)
+    except Exception:  # noqa: BLE001
+        return 0
+    if not isinstance(data, dict):
+        return 0
+    try:
+        return int(data.get("boot_unix") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def worker_check_start(lines: list, timeout_ms: int = 10000,
                         parallel: int = 8, geo_parallel: int = 4,
                         dns: str = "auto") -> dict:
@@ -313,7 +353,7 @@ def worker_check_start(lines: list, timeout_ms: int = 10000,
         data = _worker_post("/v1/check", {"lines": lines, "timeout_ms": timeout_ms,
                                           "parallel": parallel, "geo_parallel": geo_parallel,
                                           "dns": dns or "auto"},
-                            timeout=30)
+                            timeout=10)
     except urllib.error.HTTPError as e:
         try:
             body = json.loads(e.read().decode(errors="replace") or "{}")
@@ -329,13 +369,17 @@ def worker_check_start(lines: list, timeout_ms: int = 10000,
 
 
 def worker_check_poll(run_id: str) -> dict:
-    """Poll a run: GET /v1/check?id=. Returns {} when unreachable (the
-    caller keeps the last good snapshot). Never raises."""
-    import streamlit as st
-
+    """Poll a run: GET /v1/check?id=. Failure kinds stay distinct so the
+    caller can tell them apart: {} = transport trouble (timeout/down),
+    {"gone": True} = worker answered but forgot the run (restart or
+    expiry). Snapshots carry run_id. Never raises."""
     url = f"http://127.0.0.1:{WORKER_PORT}/v1/check?id={run_id}"
     try:
-        data = fetch_json(url, timeout=5)
+        data = fetch_json(url, timeout=2)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {"gone": True}
+        return {}
     except Exception:  # noqa: BLE001
         return {}
     if not isinstance(data, dict) or not data.get("run_id"):
