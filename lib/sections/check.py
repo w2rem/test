@@ -20,10 +20,12 @@ from lib.services.sidecar import worker_boot, worker_check_poll, worker_check_st
 
 PAGE_SIZE = 25
 POLL_EVERY_SEC = 4
-# Transport misses (timeout/down) vs gone misses (worker forgot the run)
-# are different failures with different verdicts — never one counter.
-MISS_TRANSPORT_LIMIT = 8
+# Gone misses (worker answered 404) condemn a run; transport misses never
+# do — silence is not death (a throttled box times out localhost polls
+# while the worker happily finishes). After a streak, poll every Nth tick
+# to lighten the starved box instead of hammering it.
 MISS_GONE_LIMIT = 3
+MISS_BACKOFF_EVERY = 3
 
 
 def _latency_badge(r: dict) -> str:
@@ -206,7 +208,15 @@ def render_check() -> None:
     @live
     def _live() -> None:
         if run.get("state") == "running":
-            snap = worker_check_poll(run["run_id"])
+            miss = int(st.session_state.get("uf5_check_miss") or 0)
+            snap = {}
+            if miss >= MISS_BACKOFF_EVERY and miss % MISS_BACKOFF_EVERY != 0:
+                # Backoff tick: lighten the starved box, count it so the
+                # cadence walks forward instead of stalling (else the skip
+                # repeats forever on a frozen counter).
+                st.session_state["uf5_check_miss"] = miss + 1
+            else:
+                snap = worker_check_poll(run["run_id"])
             if snap and snap.get("run_id"):
                 st.session_state["uf5_check_miss"] = 0
                 st.session_state["uf5_check_gone"] = 0
@@ -234,20 +244,20 @@ def render_check() -> None:
                     else:
                         run["detail"] = "sidecar down — wait for respawn, then start again"
             else:
-                # Transport trouble (timeout/down): the run may still be
-                # alive server-side — keep polling, condemn only after a
-                # long silence, and never call it a restart.
+                # Transport trouble (timeout/down): silence is not death.
+                # Never condemn — the worker may be finishing the run
+                # while this box is too starved to poll it. Keep polling
+                # (with backoff above) until a snapshot or a 404 lands.
                 miss = int(st.session_state.get("uf5_check_miss") or 0) + 1
                 st.session_state["uf5_check_miss"] = miss
-                if miss >= MISS_TRANSPORT_LIMIT:
-                    run["state"] = "error"
-                    run["detail"] = "sidecar unreachable, polling gave up — start again"
         done = sum(1 for r in run.get("results") or [] if r.get("done"))
         total = int(run.get("total") or 0)
         st.progress(min(1.0, done / total) if total else 0.0,
                     text=f"{run.get('state', '?')} — {done}/{total}")
         if run.get("state") == "error" and run.get("detail"):
             st.error(str(run["detail"]))
+        if run.get("state") == "running" and int(st.session_state.get("uf5_check_miss") or 0) >= MISS_BACKOFF_EVERY:
+            st.caption("sidecar отвечает медленно — опрос продолжается в фоне, результаты подтянутся")
 
         st.markdown(_summary_card(run), unsafe_allow_html=True)
 
