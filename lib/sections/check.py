@@ -54,7 +54,14 @@ def _row_html(r: dict) -> str:
     err = html.escape(str(r.get("error") or ""))
     sub = " · ".join(p for p in (ip, place, f"AS{asn} {org}".strip()) if p)
     if r.get("via"):
-        sub = (sub + " · " if sub else "") + f"via {r.get('via')}"
+        via_txt = f"via {r.get('via')}"
+        try:
+            raw = int(r.get("chain_ms") or 0)
+        except (TypeError, ValueError):
+            raw = 0
+        if raw:
+            via_txt += f" · raw {raw} ms"
+        sub = (sub + " · " if sub else "") + via_txt
     if r.get("done") and not r.get("alive") and err:
         sub = (sub + " · " if sub else "") + err
     return (
