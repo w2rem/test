@@ -19,7 +19,7 @@ from lib.services.sidecar import worker_check_poll, worker_check_start
 
 
 PAGE_SIZE = 25
-POLL_EVERY_SEC = 2
+POLL_EVERY_SEC = 4
 POLL_MISS_LIMIT = 5
 
 
@@ -32,11 +32,13 @@ def _latency_badge(r: dict) -> str:
         ms = int(r.get("latency_ms") or 0)
     except (TypeError, ValueError):
         return badge("?", COLOR_MUTED)
+    # Chained verdicts are approximations (relay latency subtracted).
+    prefix = "~" if r.get("via") else ""
     if ms < 300:
-        return badge(f"{ms} ms", COLOR_OK)
+        return badge(f"{prefix}{ms} ms", COLOR_OK)
     if ms < 800:
-        return badge(f"{ms} ms", COLOR_WARN)
-    return badge(f"{ms} ms", COLOR_ERR)
+        return badge(f"{prefix}{ms} ms", COLOR_WARN)
+    return badge(f"{prefix}{ms} ms", COLOR_ERR)
 
 
 def _row_html(r: dict) -> str:
@@ -51,6 +53,8 @@ def _row_html(r: dict) -> str:
     asn = geo.get("asn") or "?"
     err = html.escape(str(r.get("error") or ""))
     sub = " · ".join(p for p in (ip, place, f"AS{asn} {org}".strip()) if p)
+    if r.get("via"):
+        sub = (sub + " · " if sub else "") + f"via {r.get('via')}"
     if r.get("done") and not r.get("alive") and err:
         sub = (sub + " · " if sub else "") + err
     return (
@@ -75,7 +79,10 @@ def _summary_card(run: dict) -> str:
     state_badge = badge(state, COLOR_OK if state == "done" else COLOR_WARN)
     dead = done_n - len(alive)
     pending = max(0, int(run.get("total") or 0) - done_n)
+    via_n = sum(1 for r in alive if r.get("via"))
     line2 = f"{len(alive)} alive · {dead} dead"
+    if via_n:
+        line2 += f" · {via_n} via chain"
     if pending:
         line2 += f" · {pending} running"
     if med:
