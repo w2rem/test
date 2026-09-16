@@ -41,87 +41,9 @@ ICON_POSTGRES = '''<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><
 
 ICON_VALKEY = '''<svg viewBox="3 4 51 57" xmlns="http://www.w3.org/2000/svg"><path fill="#211f1f" fill-rule="evenodd" d="M15.2,50l-9.4-5.9v-25L28.8,6l22.3,13.1v26.3l-22.7,12.8-7.9-4.9v-12l-4.3-2.7v-13.6l12.4-7.1,12.1,7.1v14.2l-9.6,5.4v-5.7c2.9-1.1,4.9-3.9,4.9-7.3s-3.4-7.8-7.6-7.8-7.6,3.5-7.6,7.8,2.1,6.2,4.9,7.3v10.9l2.7,1.7,16.8-9.5v-19.7l-16.6-9.8-17.1,9.8v18.5l3.6,2.3v6.8ZM28.5,28.1c1.9,0,3.4,1.6,3.4,3.6s-1.5,3.6-3.4,3.6-3.4-1.6-3.4-3.6,1.5-3.6,3.4-3.6Z"/></svg>'''
 
-ICON_SAGERNET = '''<svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="150 90 725 815">
-  <defs>
-    <linearGradient id="bg25" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#242F37"/>
-      <stop offset="1" stop-color="#0D1317"/>
-    </linearGradient>
-    <radialGradient id="spot25" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#46565F" stop-opacity="0.45"/>
-      <stop offset="1" stop-color="#46565F" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="soft25" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="18"/>
-    </filter>
-    <linearGradient id="top25" gradientUnits="userSpaceOnUse" x1="330" y1="320" x2="700" y2="490">
-      <stop offset="0" stop-color="#445863"/>
-      <stop offset="1" stop-color="#394C57"/>
-    </linearGradient>
-    <linearGradient id="left25" gradientUnits="userSpaceOnUse" x1="269.5" y1="480" x2="512" y2="720">
-      <stop offset="0" stop-color="#26323A"/>
-      <stop offset="1" stop-color="#1F2A31"/>
-    </linearGradient>
-    <linearGradient id="right25" gradientUnits="userSpaceOnUse" x1="512" y1="650" x2="754.5" y2="500">
-      <stop offset="0" stop-color="#30404A"/>
-      <stop offset="1" stop-color="#374854"/>
-    </linearGradient>
-    <filter id="grain25" x="0" y="0" width="280" height="280" filterUnits="userSpaceOnUse">
-      <feTurbulence type="fractalNoise" baseFrequency="0.22" numOctaves="4" seed="17" result="n"/>
-      <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0.45 0 0 0 -0.1"/>
-    </filter>
-    <filter id="grainD25" x="0" y="0" width="280" height="280" filterUnits="userSpaceOnUse">
-      <feTurbulence type="fractalNoise" baseFrequency="0.28" numOctaves="4" seed="41" result="n"/>
-      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.02  0 0 0 0 0.05  0 0 0 0 0.07  0.45 0 0 0 -0.1"/>
-    </filter>
-    <clipPath id="clipTopD"><path d="M512 262 754.5 402 512 542 269.5 402Z"/></clipPath>
-    <clipPath id="clipLeftD"><path d="M269.5 402 512 542 512 812 269.5 672Z"/></clipPath>
-    <clipPath id="clipRightD"><path d="M512 542 754.5 402 754.5 672 512 812Z"/></clipPath>
-  </defs>
-  <g transform="translate(-225.28 -273.28) scale(1.44)">
-<!-- deep cardboard faces -->
-  <path d="M512 262 754.5 402 512 542 269.5 402Z" fill="url(#top25)"/>
-  <path d="M269.5 402 512 542 512 812 269.5 672Z" fill="url(#left25)"/>
-  <path d="M512 542 754.5 402 754.5 672 512 812Z" fill="url(#right25)"/>
-
-  <!-- paper grain, foreshortened per face -->
-  <g clip-path="url(#clipTopD)"><g transform="matrix(0.866 0.5 0.866 -0.5 269.5 402)">
-    <rect width="280" height="280" filter="url(#grain25)" opacity="0.30"/>
-    <rect width="280" height="280" filter="url(#grainD25)" opacity="0.38"/>
-  </g></g>
-  <g clip-path="url(#clipLeftD)"><g transform="matrix(0.866 0.5 0 0.96428 269.5 402)">
-    <rect width="280" height="280" filter="url(#grain25)" opacity="0.20"/>
-    <rect width="280" height="280" filter="url(#grainD25)" opacity="0.34"/>
-  </g></g>
-  <g clip-path="url(#clipRightD)"><g transform="matrix(0.866 -0.5 0 0.96428 512 542)">
-    <rect width="280" height="280" filter="url(#grain25)" opacity="0.25"/>
-    <rect width="280" height="280" filter="url(#grainD25)" opacity="0.34"/>
-  </g></g>
-
-  <!-- lid flap seam: two lid halves, paper-edge catchlight -->
-  <path d="M390.75 472 633.25 332" stroke="#141E24" stroke-width="4" fill="none" opacity="0.9"/>
-  <path d="M390.75 472 633.25 332" stroke="#6E8794" stroke-width="2" fill="none" opacity="0.7" transform="translate(0 -3)"/>
-
-  <!-- soft ambient occlusion at junctions -->
-  <path d="M269.5 402 512 542" stroke="#0B141A" stroke-width="10" opacity="0.28" filter="url(#soft25)" fill="none"/>
-  <path d="M512 542 754.5 402" stroke="#0B141A" stroke-width="10" opacity="0.22" filter="url(#soft25)" fill="none"/>
-  <path d="M512 542 512 812" stroke="#060D11" stroke-width="9" opacity="0.30" filter="url(#soft25)" fill="none"/>
-
-  <!-- paper-edge highlights on the top edges -->
-  <path d="M512 262 754.5 402" stroke="#66808D" stroke-width="2.5" fill="none"/>
-  <path d="M512 262 269.5 402" stroke="#5A737F" stroke-width="2.5" fill="none"/>
-  <path d="M269.5 402 512 542 754.5 402" stroke="#4E6773" stroke-width="2" fill="none" opacity="0.9"/>
-  <path d="M512 542 512 812" stroke="#445963" stroke-width="2" fill="none" opacity="0.9"/>
-
-  <!-- original two-tone tape, aligned tails -->
-  <path d="M356.8 351.6 390.75 332 633.25 472 599.3 491.6Z" fill="#99AAB5"/>
-  <path d="M390.75 332 424.7 312.4 667.2 452.4 633.25 472Z" fill="#E1E8ED"/>
-  <path d="M599.3 491.6 633.25 472 633.25 592 599.3 611.6Z" fill="#8296A1"/>
-  <path d="M633.25 472 667.2 452.4 667.2 572.4 633.25 592Z" fill="#CCD6DD"/>
-  <!-- tape soft shadow onto the paper -->
-  <path d="M360 358 602.5 498" stroke="#000000" opacity="0.25" stroke-width="7" filter="url(#soft25)" fill="none"/>
-  </g>
-</svg>'''
+# Single-line on purpose: blank lines split markdown HTML blocks and
+# shatter the svg (faces render, tape/paths go inert, badges misplace).
+ICON_SAGERNET = '''<svg width="44" height="44" xmlns="http://www.w3.org/2000/svg" viewBox="150 90 725 815">  <defs>    <linearGradient id="bg25" x1="0" y1="0" x2="0" y2="1">      <stop offset="0" stop-color="#242F37"/>      <stop offset="1" stop-color="#0D1317"/>    </linearGradient>    <radialGradient id="spot25" cx="0.5" cy="0.5" r="0.5">      <stop offset="0" stop-color="#46565F" stop-opacity="0.45"/>      <stop offset="1" stop-color="#46565F" stop-opacity="0"/>    </radialGradient>    <filter id="soft25" x="-40%" y="-40%" width="180%" height="180%">      <feGaussianBlur stdDeviation="18"/>    </filter>    <linearGradient id="top25" gradientUnits="userSpaceOnUse" x1="330" y1="320" x2="700" y2="490">      <stop offset="0" stop-color="#445863"/>      <stop offset="1" stop-color="#394C57"/>    </linearGradient>    <linearGradient id="left25" gradientUnits="userSpaceOnUse" x1="269.5" y1="480" x2="512" y2="720">      <stop offset="0" stop-color="#26323A"/>      <stop offset="1" stop-color="#1F2A31"/>    </linearGradient>    <linearGradient id="right25" gradientUnits="userSpaceOnUse" x1="512" y1="650" x2="754.5" y2="500">      <stop offset="0" stop-color="#30404A"/>      <stop offset="1" stop-color="#374854"/>    </linearGradient>    <filter id="grain25" x="0" y="0" width="280" height="280" filterUnits="userSpaceOnUse">      <feTurbulence type="fractalNoise" baseFrequency="0.22" numOctaves="4" seed="17" result="n"/>      <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0.45 0 0 0 -0.1"/>    </filter>    <filter id="grainD25" x="0" y="0" width="280" height="280" filterUnits="userSpaceOnUse">      <feTurbulence type="fractalNoise" baseFrequency="0.28" numOctaves="4" seed="41" result="n"/>      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.02  0 0 0 0 0.05  0 0 0 0 0.07  0.45 0 0 0 -0.1"/>    </filter>    <clipPath id="clipTopD"><path d="M512 262 754.5 402 512 542 269.5 402Z"/></clipPath>    <clipPath id="clipLeftD"><path d="M269.5 402 512 542 512 812 269.5 672Z"/></clipPath>    <clipPath id="clipRightD"><path d="M512 542 754.5 402 754.5 672 512 812Z"/></clipPath>  </defs>  <g transform="translate(-225.28 -273.28) scale(1.44)"><!-- deep cardboard faces -->  <path d="M512 262 754.5 402 512 542 269.5 402Z" fill="url(#top25)"/>  <path d="M269.5 402 512 542 512 812 269.5 672Z" fill="url(#left25)"/>  <path d="M512 542 754.5 402 754.5 672 512 812Z" fill="url(#right25)"/>  <!-- paper grain, foreshortened per face -->  <g clip-path="url(#clipTopD)"><g transform="matrix(0.866 0.5 0.866 -0.5 269.5 402)">    <rect width="280" height="280" filter="url(#grain25)" opacity="0.30"/>    <rect width="280" height="280" filter="url(#grainD25)" opacity="0.38"/>  </g></g>  <g clip-path="url(#clipLeftD)"><g transform="matrix(0.866 0.5 0 0.96428 269.5 402)">    <rect width="280" height="280" filter="url(#grain25)" opacity="0.20"/>    <rect width="280" height="280" filter="url(#grainD25)" opacity="0.34"/>  </g></g>  <g clip-path="url(#clipRightD)"><g transform="matrix(0.866 -0.5 0 0.96428 512 542)">    <rect width="280" height="280" filter="url(#grain25)" opacity="0.25"/>    <rect width="280" height="280" filter="url(#grainD25)" opacity="0.34"/>  </g></g>  <!-- lid flap seam: two lid halves, paper-edge catchlight -->  <path d="M390.75 472 633.25 332" stroke="#141E24" stroke-width="4" fill="none" opacity="0.9"/>  <path d="M390.75 472 633.25 332" stroke="#6E8794" stroke-width="2" fill="none" opacity="0.7" transform="translate(0 -3)"/>  <!-- soft ambient occlusion at junctions -->  <path d="M269.5 402 512 542" stroke="#0B141A" stroke-width="10" opacity="0.28" filter="url(#soft25)" fill="none"/>  <path d="M512 542 754.5 402" stroke="#0B141A" stroke-width="10" opacity="0.22" filter="url(#soft25)" fill="none"/>  <path d="M512 542 512 812" stroke="#060D11" stroke-width="9" opacity="0.30" filter="url(#soft25)" fill="none"/>  <!-- paper-edge highlights on the top edges -->  <path d="M512 262 754.5 402" stroke="#66808D" stroke-width="2.5" fill="none"/>  <path d="M512 262 269.5 402" stroke="#5A737F" stroke-width="2.5" fill="none"/>  <path d="M269.5 402 512 542 754.5 402" stroke="#4E6773" stroke-width="2" fill="none" opacity="0.9"/>  <path d="M512 542 512 812" stroke="#445963" stroke-width="2" fill="none" opacity="0.9"/>  <!-- original two-tone tape, aligned tails -->  <path d="M356.8 351.6 390.75 332 633.25 472 599.3 491.6Z" fill="#99AAB5"/>  <path d="M390.75 332 424.7 312.4 667.2 452.4 633.25 472Z" fill="#E1E8ED"/>  <path d="M599.3 491.6 633.25 472 633.25 592 599.3 611.6Z" fill="#8296A1"/>  <path d="M633.25 472 667.2 452.4 667.2 572.4 633.25 592Z" fill="#CCD6DD"/>  <!-- tape soft shadow onto the paper -->  <path d="M360 358 602.5 498" stroke="#000000" opacity="0.25" stroke-width="7" filter="url(#soft25)" fill="none"/>  </g></svg>'''
 
 
 ICON_SVGS = {"python": ICON_PYTHON, "tailscale": ICON_TAILSCALE,
