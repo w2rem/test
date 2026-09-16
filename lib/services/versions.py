@@ -95,19 +95,24 @@ def render_versions() -> None:
     """Python / Postgres / Valkey / Tailscale / sing-box row: icon + name + version."""
     import streamlit as st
 
-    cols = st.columns(5)
-    slots = [c.empty() for c in cols]
-    cached_versions = st.session_state.setdefault("uf5_versions", {})
-    for s in slots:
-        s.markdown('<div class="uf5-sk" style="height:44px"></div>',
-                   unsafe_allow_html=True)
-    for slot, (label, icon, resolver) in zip(slots, (
+    items = (
         ("Python", "python", resolve_python_version),
         ("Postgres", "postgres", resolve_postgres_version),
         ("Valkey", "valkey", resolve_valkey_version),
         ("Tailscale", "tailscale", resolve_tailscale_version),
         ("sing-box", "sagernet", resolve_singbox_version),
-    )):
+    )
+    # Five badges share one row: shrink icons + type so nothing wraps.
+    compact = len(items) > 4
+    row_cls = "uf5-ver uf5-ver-compact" if compact else "uf5-ver"
+    icon_px = 32 if compact else 44
+    cols = st.columns(len(items))
+    slots = [c.empty() for c in cols]
+    cached_versions = st.session_state.setdefault("uf5_versions", {})
+    for s in slots:
+        s.markdown('<div class="uf5-sk" style="height:44px"></div>',
+                   unsafe_allow_html=True)
+    for slot, (label, icon, resolver) in zip(slots, items):
         version = cached_versions.get(label)
         # Transient answers are retried on the next visit: the toolchain may
         # still be downloading and the sidecar may still be warming up.
@@ -116,10 +121,10 @@ def render_versions() -> None:
             with st.spinner(f"resolving {label.lower()}…"):
                 version = resolver()
             cached_versions[label] = version
-        svg = load_icon(icon)
+        svg = load_icon(icon, icon_px)
         color = COLOR_OK if version not in ("not installed", "error", "unknown") else COLOR_MUTED
         slot.markdown(
-            f'<div class="uf5-ver">{svg}<span class="uf5-ver-name">{label}</span>'
+            f'<div class="{row_cls}">{svg}<span class="uf5-ver-name">{label}</span>'
             f'{badge(version, color)}</div>',
             unsafe_allow_html=True)
         log_event("debug", f"version {label}={version}")

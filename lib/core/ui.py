@@ -25,6 +25,12 @@ def inject_style() -> None:
         .uf5-ver {{ display: flex; align-items: center; gap: 12px; }}
         .uf5-ver b {{ font-size: 15px; }}
         .uf5-ver .uf5-ver-name {{ flex: 1; font-size: 15px; font-weight: 600; }}
+        /* Compact versions row (5+ badges): tighter type, no wrap. */
+        .uf5-ver-compact {{ gap: 8px; }}
+        .uf5-ver-compact .uf5-ver-name {{ font-size: 13px; white-space: nowrap;
+                                          overflow: hidden; text-overflow: ellipsis; }}
+        .uf5-ver-compact .uf5-badge {{ font-size: 11px; padding: 2px 10px;
+                                       white-space: nowrap; }}
         /* Sidebar: soft studio panel, both testids covered. */
         section[data-testid="stSidebar"], div[data-testid="stSidebarContent"] {{
             background: linear-gradient(180deg, #FFFFFF 0%, {COLOR_PANEL} 78%);
